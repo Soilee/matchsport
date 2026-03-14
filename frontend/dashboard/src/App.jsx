@@ -3,7 +3,7 @@ import { supabase } from './supabase';
 import { Users, CreditCard, Activity, TrendingUp, Search, Bell, Settings, LogOut, Dumbbell, Layout, CheckSquare, UserPlus, ShieldCheck, Key, Trash2, Edit, DollarSign } from 'lucide-react';
 import './App.css';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'https://matchsport.onrender.com/api';
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 7); // 07:00-22:00
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const DAY_LABELS = { mon: 'Pzt', tue: 'Sal', wed: 'Çar', thu: 'Per', fri: 'Cum', sat: 'Cmt', sun: 'Paz' };

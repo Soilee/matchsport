@@ -3,9 +3,7 @@ import { Platform } from 'react-native';
 
 // Use localhost for web, 10.0.2.2 for Android emulator, localhost for iOS simulator
 const getBaseUrl = () => {
-    if (Platform.OS === 'web') return 'http://localhost:3001';
-    if (Platform.OS === 'android') return 'http://10.0.2.2:3001';
-    return 'http://localhost:3001';
+    return 'https://matchsport.onrender.com';
 };
 
 const api = axios.create({
