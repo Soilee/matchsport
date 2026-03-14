@@ -202,6 +202,7 @@ body {
   overflow-x: auto;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
 }
 
 table {

@@ -169,4 +169,8 @@ export const saveDietPlan = async (data: any) => {
     return res.data;
 };
 
+export const getInstallments = async () => (await api.get('/user/installments')).data;
+export const adminGetUserInstallments = async (userId: string) => (await api.get(`/admin/user-installments/${userId}`)).data;
+export const adminPayInstallment = async (instId: string) => (await api.post(`/admin/pay-installment/${instId}`)).data;
+
 export default api;

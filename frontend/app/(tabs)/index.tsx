@@ -138,7 +138,9 @@ export default function DashboardScreen() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <StatusBar style="light" />
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { flexGrow: 1 }]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
         >
           {data && (

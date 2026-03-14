@@ -106,7 +106,8 @@ export default function ProfileScreen() {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
             <SafeAreaView style={styles.container}>
                 <ScrollView
-                    contentContainerStyle={styles.scrollContent}
+                    contentContainerStyle={[styles.scrollContent, { flexGrow: 1 }]}
+                    keyboardDismissMode="on-drag"
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
                 >
                     <Card style={styles.profileCard} glow>
@@ -164,6 +165,29 @@ export default function ProfileScreen() {
                                 thumbColor="#fff"
                             />
                         </View>
+
+                        <TouchableOpacity style={styles.menuItem}>
+                            <Ionicons name="language-outline" size={22} color={Colors.textSecondary} />
+                            <Text style={styles.menuText}>Dil / Language</Text>
+                            <Text style={styles.menuVal}>Türkçe</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.menuItem}>
+                            <Ionicons name="color-palette-outline" size={22} color={Colors.textSecondary} />
+                            <Text style={styles.menuText}>Tema (Karanlık)</Text>
+                            <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.menuItem}>
+                            <Ionicons name="information-circle-outline" size={22} color={Colors.textSecondary} />
+                            <Text style={styles.menuText}>Hakkında</Text>
+                            <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={[styles.menuItem, { borderBottomWidth: 0 }]} onPress={() => Alert.alert('Hesap Silme', 'Hesabınızı silmek istediğinize emin misiniz? Bu işlem geri alınamaz.', [{ text: 'Vazgeç', style: 'cancel' }, { text: 'Evet, Sil', style: 'destructive' }])}>
+                            <Ionicons name="trash-outline" size={22} color={Colors.error} />
+                            <Text style={[styles.menuText, { color: Colors.error }]}>Hesabı Sil</Text>
+                        </TouchableOpacity>
 
                         <TouchableOpacity style={[styles.menuItem, { borderBottomWidth: 0 }]} onPress={handleLogout}>
                             <Ionicons name="log-out-outline" size={22} color={Colors.error} />
@@ -337,6 +361,11 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: 16,
         color: Colors.text,
+        fontWeight: '600',
+    },
+    menuVal: {
+        fontSize: 14,
+        color: Colors.textMuted,
         fontWeight: '600',
     },
     logoutBtn: {

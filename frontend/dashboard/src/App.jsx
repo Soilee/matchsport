@@ -360,6 +360,7 @@ const App = () => {
                   <td><div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
                     <button className="btn-action" style={{ color: '#FF9F0A' }} onClick={() => handleStatusToggle(m.id, m.memberships?.[0]?.status)}>{m.memberships?.[0]?.status === 'frozen' ? 'Aktif' : 'Dondur'}</button>
                     <button className="btn-action" style={{ color: '#34C759' }} onClick={() => openModal('payment', m)}>💰 Ödeme</button>
+                    <button className="btn-action" style={{ color: '#007AFF' }} onClick={() => openModal('installments', m)}>📊 Taksitler</button>
                     <button className="btn-action" onClick={() => openModal('add-days', m)}>📅 Gün Ekle</button>
                     <button className="btn-action" onClick={() => openModal('measurement', m)}>📐 Ölçüm</button>
                     <button className="btn-action" onClick={() => openModal('reset-password', m)}><Key size={14} /></button>
@@ -475,73 +476,58 @@ const App = () => {
         <div className="modal-overlay" onClick={e => e.target.className === 'modal-overlay' && closeModal()}>
           <div className="modal-content">
             <header className="modal-header">
-              <h3>{modal.type === 'measurement' ? 'Ölçüm Ekle' : modal.type === 'add-days' ? 'Üyelik Uzat' : modal.type === 'announcement' ? 'Duyuru Yayınla' : modal.type === 'diet' ? 'Diyet Planı Ata' : modal.type === 'add-trainer' ? 'Yeni Eğitmen' : modal.type === 'add-member' ? 'Yeni Üye Ekle' : modal.type === 'reset-password' ? 'Şifre Sıfırla' : modal.type === 'payment' ? 'Ödeme Kaydet' : modal.type === 'change-role' ? 'Rol Değiştir' : modal.type === 'nutrition-view' ? `${modal.data?.full_name} - Beslenme` : modal.type === 'task' ? 'Görev Ata' : 'İşlem'}</h3>
+              <h3>{modal.type === 'measurement' ? 'Ölçüm Ekle' : modal.type === 'add-days' ? 'Üyelik Uzat' : modal.type === 'announcement' ? 'Duyuru Yayınla' : modal.type === 'diet' ? 'Diyet Planı Ata' : modal.type === 'add-trainer' ? 'Yeni Eğitmen' : modal.type === 'add-member' ? 'Yeni Üye Ekle' : modal.type === 'reset-password' ? 'Şifre Sıfırla' : modal.type === 'payment' ? 'Ödeme Kaydet' : modal.type === 'installments' ? `${modal.data?.full_name} - Taksitler` : modal.type === 'change-role' ? 'Rol Değiştir' : modal.type === 'nutrition-view' ? `${modal.data?.full_name} - Beslenme` : modal.type === 'task' ? 'Görev Ata' : 'İşlem'}</h3>
               <button className="btn-close" onClick={closeModal}>×</button>
             </header>
-            <form onSubmit={handleModalSubmit} className="modal-form">
-              {modal.type === 'measurement' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group"><label>Kilo (kg)</label><input type="number" step="0.1" required onChange={e => setFormData({ ...formData, weight: e.target.value })} /></div>
-                  <div className="form-group"><label>Yağ (%)</label><input type="number" step="0.1" required onChange={e => setFormData({ ...formData, fat: e.target.value })} /></div>
-                  <div className="form-group"><label>Göğüs (cm)</label><input type="number" step="0.1" onChange={e => setFormData({ ...formData, chest: e.target.value })} /></div>
-                  <div className="form-group"><label>Bel (cm)</label><input type="number" step="0.1" onChange={e => setFormData({ ...formData, waist: e.target.value })} /></div>
-                  <div className="form-group"><label>Kol (cm)</label><input type="number" step="0.1" onChange={e => setFormData({ ...formData, arm: e.target.value })} /></div>
-                  <div className="form-group"><label>Bacak (cm)</label><input type="number" step="0.1" onChange={e => setFormData({ ...formData, leg: e.target.value })} /></div>
-                </div>
-              )}
-              {modal.type === 'payment' && (<>
-                <div className="form-group"><label>Paket Toplam Fiyatı (₺)</label><input type="number" step="0.1" placeholder="Örn: 12000" onChange={e => setFormData({ ...formData, total_price: e.target.value })} /></div>
-                <div className="form-group"><label>Bu Ay Ödenen Tutar (₺)</label><input type="number" step="0.1" placeholder="Örn: 4000" required onChange={e => setFormData({ ...formData, amount: e.target.value })} /></div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group"><label>Ödeme Türü</label><select onChange={e => setFormData({ ...formData, payment_type: e.target.value })} defaultValue="cash_full"><option value="cash_full">Peşin</option><option value="installment">Taksitli</option></select></div>
-                  <div className="form-group"><label>Taksit Sayısı</label><input type="number" placeholder="1" onChange={e => setFormData({ ...formData, installment_count: e.target.value })} /></div>
-                </div>
-                <div className="form-group"><label>Paket Süresi</label><select onChange={e => setFormData({ ...formData, package_type: e.target.value })} defaultValue="1_month"><option value="1_month">1 Ay</option><option value="3_months">3 Ay</option><option value="6_months">6 Ay</option><option value="12_months">12 Ay</option></select></div>
-                <div className="form-group"><label>Ödeme Yöntemi</label><select onChange={e => setFormData({ ...formData, payment_method: e.target.value })} defaultValue="cash"><option value="cash">Nakit</option><option value="card">Kart</option><option value="bank_transfer">Havale/EFT</option></select></div>
-                <div className="form-group"><label>Not</label><input type="text" placeholder="Opsiyonel" onChange={e => setFormData({ ...formData, notes: e.target.value })} /></div>
-              </>)}
-              {modal.type === 'diet' && (<>
-                <div className="form-group"><label>Diyet Planı Adı</label><input type="text" placeholder="Örn: Bulk Dönemi v1" required onChange={e => setFormData({ ...formData, plan_name: e.target.value })} /></div>
-                <div className="form-group"><label>Açıklama</label><textarea placeholder="Detaylar..." onChange={e => setFormData({ ...formData, description: e.target.value })} /></div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div className="form-group"><label>Kalori (kcal)</label><input type="number" placeholder="2500" onChange={e => setFormData({ ...formData, daily_calories: e.target.value })} /></div>
-                  <div className="form-group"><label>Protein (g)</label><input type="number" placeholder="180" onChange={e => setFormData({ ...formData, protein_g: e.target.value })} /></div>
-                  <div className="form-group"><label>Karb (g)</label><input type="number" placeholder="300" onChange={e => setFormData({ ...formData, carbs_g: e.target.value })} /></div>
-                  <div className="form-group"><label>Yağ (g)</label><input type="number" placeholder="70" onChange={e => setFormData({ ...formData, fat_g: e.target.value })} /></div>
-                </div>
-              </>)}
-              {(modal.type === 'add-trainer' || modal.type === 'add-member') && (<>
-                <div className="form-group"><label>Tam Adı</label><input type="text" placeholder="Ad Soyad" required onChange={e => setFormData({ ...formData, full_name: e.target.value })} /></div>
-                <div className="form-group"><label>E-posta</label><input type="email" placeholder="ornek@email.com" required onChange={e => setFormData({ ...formData, email: e.target.value })} /></div>
-                <div className="form-group"><label>Şifre</label><input type="password" placeholder="Şifre" required onChange={e => setFormData({ ...formData, password: e.target.value })} /></div>
-                <div className="form-group"><label>Telefon</label><input type="text" placeholder="555..." onChange={e => setFormData({ ...formData, phone: e.target.value })} /></div>
-              </>)}
-              {modal.type === 'reset-password' && (
-                <div className="form-group"><label>Yeni Şifre ({modal.data?.full_name})</label><input type="password" placeholder="Yeni şifre" required onChange={e => setFormData({ ...formData, password: e.target.value })} /></div>
-              )}
-              {modal.type === 'add-days' && (
-                <div className="form-group"><label>Uzatılacak Gün ({modal.data?.full_name})</label><input type="number" placeholder="30" required onChange={e => setFormData({ ...formData, days: e.target.value })} /></div>
-              )}
-              {modal.type === 'announcement' && (<>
-                <div className="form-group"><label>Başlık</label><input type="text" placeholder="Duyuru başlığı" required onChange={e => setFormData({ ...formData, title: e.target.value })} /></div>
-                <div className="form-group"><label>İçerik</label><textarea placeholder="Detaylar..." required onChange={e => setFormData({ ...formData, content: e.target.value })} /></div>
-              </>)}
-              {modal.type === 'change-role' && (
-                <div className="form-group"><label>Yeni Rol ({modal.data?.full_name})</label><select required onChange={e => setFormData({ ...formData, role: e.target.value })} defaultValue="">
-                  <option value="" disabled>Seçin</option><option value="member">Üye</option><option value="trainer">Eğitmen</option>
-                  {isSuperAdmin && <option value="admin">Admin</option>}
-                </select></div>
-              )}
-              {modal.type === 'task' && (<>
-                <div className="form-group"><label>Görev Metni</label><input type="text" placeholder="Bugün 15 dk kardiyo!" required onChange={e => setFormData({ ...formData, title: e.target.value })} /></div>
-                <div className="form-group"><label>Ödül (XP)</label><input type="number" defaultValue="10" required onChange={e => setFormData({ ...formData, points: e.target.value })} /></div>
-              </>)}
-              {modal.type === 'nutrition-view' && <StudentNutritionLogs userId={modal.data.id} />}
-              <footer className="modal-footer">
-                <button type="button" className="btn-secondary" onClick={closeModal}>Vazgeç</button>
-                {modal.type !== 'nutrition-view' && <button type="submit" className="btn-primary">Kaydet</button>}
-              </footer>
-            </form>
+            <div className="modal-body-scroll" style={{ maxHeight: '70vh', overflowY: 'auto', paddingRight: '10px' }}>
+              <form id="modal-form" onSubmit={handleModalSubmit} className="modal-form">
+                {modal.type === 'measurement' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div className="form-group"><label>Kilo (kg)</label><input type="number" step="0.1" required onChange={e => setFormData({ ...formData, weight: e.target.value })} /></div>
+                    <div className="form-group"><label>Yağ (%)</label><input type="number" step="0.1" required onChange={e => setFormData({ ...formData, fat: e.target.value })} /></div>
+                    <div className="form-group"><label>Göğüs (cm)</label><input type="number" step="0.1" onChange={e => setFormData({ ...formData, chest: e.target.value })} /></div>
+                    <div className="form-group"><label>Bel (cm)</label><input type="number" step="0.1" onChange={e => setFormData({ ...formData, waist: e.target.value })} /></div>
+                    <div className="form-group"><label>Kol (cm)</label><input type="number" step="0.1" onChange={e => setFormData({ ...formData, arm: e.target.value })} /></div>
+                    <div className="form-group"><label>Bacak (cm)</label><input type="number" step="0.1" onChange={e => setFormData({ ...formData, leg: e.target.value })} /></div>
+                  </div>
+                )}
+                {modal.type === 'payment' && (<>
+                  <div className="form-group"><label>Paket Toplam Fiyatı (₺)</label><input type="number" step="0.1" placeholder="Örn: 12000" onChange={e => setFormData({ ...formData, total_price: e.target.value })} /></div>
+                  <div className="form-group"><label>Bu Ay Ödenen Tutar (₺)</label><input type="number" step="0.1" placeholder="Örn: 4000" required onChange={e => setFormData({ ...formData, amount: e.target.value })} /></div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div className="form-group"><label>Ödeme Türü</label><select onChange={e => setFormData({ ...formData, payment_type: e.target.value })} defaultValue="cash_full"><option value="cash_full">Peşin</option><option value="installment">Taksitli</option></select></div>
+                    <div className="form-group"><label>Taksit Sayısı</label><input type="number" placeholder="1" onChange={e => setFormData({ ...formData, installment_count: e.target.value })} /></div>
+                  </div>
+                  <div className="form-group"><label>Paket Süresi</label><select onChange={e => setFormData({ ...formData, package_type: e.target.value })} defaultValue="1_month"><option value="1_month">1 Ay</option><option value="3_months">3 Ay</option><option value="6_months">6 Ay</option><option value="12_months">12 Ay</option><option value="6+6">6+6 Paket</option></select></div>
+                  <div className="form-group"><label>Ödeme Yöntemi</label><select onChange={e => setFormData({ ...formData, payment_method: e.target.value })} defaultValue="cash"><option value="cash">Nakit</option><option value="card">Kart</option><option value="bank_transfer">Havale/EFT</option></select></div>
+                  <div className="form-group"><label>Not</label><input type="text" placeholder="Opsiyonel" onChange={e => setFormData({ ...formData, notes: e.target.value })} /></div>
+                </>)}
+                {modal.type === 'diet' && (<>
+                  <div className="form-group"><label>Diyet Planı Adı</label><input type="text" placeholder="Örn: Bulk Dönemi v1" required onChange={e => setFormData({ ...formData, plan_name: e.target.value })} /></div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div className="form-group"><label>Kalori (kcal)</label><input type="number" placeholder="2500" onChange={e => setFormData({ ...formData, daily_calories: e.target.value })} /></div>
+                    <div className="form-group"><label>Protein (g)</label><input type="number" placeholder="180" onChange={e => setFormData({ ...formData, protein_g: e.target.value })} /></div>
+                    <div className="form-group"><label>Karb (g)</label><input type="number" placeholder="300" onChange={e => setFormData({ ...formData, carbs_g: e.target.value })} /></div>
+                    <div className="form-group"><label>Yağ (g)</label><input type="number" placeholder="70" onChange={e => setFormData({ ...formData, fat_g: e.target.value })} /></div>
+                  </div>
+                </>)}
+                {modal.type === 'installments' && <MemberInstallmentView userId={modal.data.id} />}
+                {modal.type === 'nutrition-view' && <StudentNutritionLogs userId={modal.data.id} />}
+
+                {(modal.type === 'add-trainer' || modal.type === 'add-member') && (<>
+                  <div className="form-group"><label>Tam Adı</label><input type="text" placeholder="Ad Soyad" required onChange={e => setFormData({ ...formData, full_name: e.target.value })} /></div>
+                  <div className="form-group"><label>E-posta</label><input type="email" placeholder="ornek@email.com" required onChange={e => setFormData({ ...formData, email: e.target.value })} /></div>
+                  <div className="form-group"><label>Şifre</label><input type="password" placeholder="Şifre" required onChange={e => setFormData({ ...formData, password: e.target.value })} /></div>
+                  <div className="form-group"><label>Telefon</label><input type="text" placeholder="555..." onChange={e => setFormData({ ...formData, phone: e.target.value })} /></div>
+                </>)}
+                <footer className="modal-footer">
+                  <button type="button" className="btn-secondary" onClick={closeModal}>Vazgeç</button>
+                  {modal.type !== 'nutrition-view' && modal.type !== 'installments' && (
+                    <button type="submit" form="modal-form" className="btn-primary" disabled={loading}>{loading ? 'İşleniyor...' : 'Kaydet'}</button>
+                  )}
+                </footer>
+              </form>
+            </div>
           </div>
         </div>
       )}
@@ -561,6 +547,50 @@ const StudentNutritionLogs = ({ userId }) => {
   return logs.length === 0 ? <p style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '1rem' }}>Kayıt yok.</p> : (
     <table className="mini-table"><thead><tr><th>Besin</th><th>Miktar</th><th>Protein</th><th>Karb</th><th>Yağ</th><th>Kalori</th></tr></thead>
       <tbody>{logs.map(l => <tr key={l.id}><td>{l.food_items?.name}</td><td>{l.quantity_g}g</td><td>{l.protein_g}g</td><td>{l.carbs_g}g</td><td>{l.fat_g}g</td><td>{l.calories} kcal</td></tr>)}</tbody>
+    </table>
+  );
+};
+
+const MemberInstallmentView = ({ userId }) => {
+  const [installments, setInstallments] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchInst = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const r = await fetch(`${API_URL}/admin/user-installments/${userId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+      const d = await r.json();
+      setInstallments(d || []);
+    } catch (e) { console.error(e); } finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchInst(); }, [userId]);
+
+  const handlePay = async (id) => {
+    if (!window.confirm('Bu taksiti ödendi olarak işaretlemek istiyor musunuz?')) return;
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`${API_URL}/admin/pay-installment/${id}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+      fetchInst();
+    } catch (e) { alert('Hata oluştu'); }
+  };
+
+  if (loading) return <div>Yükleniyor...</div>;
+  if (installments.length === 0) return <p style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-dim)' }}>Taksit kaydı bulunamadı.</p>;
+
+  return (
+    <table className="mini-table">
+      <thead><tr><th>Vade</th><th>Tutar</th><th>Durum</th><th>İşlem</th></tr></thead>
+      <tbody>
+        {installments.map(i => (
+          <tr key={i.id}>
+            <td>{new Date(i.due_date).toLocaleDateString('tr-TR')}</td>
+            <td>₺{i.amount}</td>
+            <td><span className={`badge badge-${i.status === 'paid' ? 'active' : 'expired'}`}>{i.status === 'paid' ? 'ÖDENDİ' : 'BEKLEYEN'}</span></td>
+            <td>{i.status === 'pending' && <button type="button" className="btn-action" style={{ color: '#34C759' }} onClick={() => handlePay(i.id)}>Öde</button>}</td>
+          </tr>
+        ))}
+      </tbody>
     </table>
   );
 };

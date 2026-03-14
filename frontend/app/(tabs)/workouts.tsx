@@ -486,7 +486,7 @@ export default function WorkoutsScreen() {
     return (
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
             <SafeAreaView style={styles.container}>
-                <View style={styles.header}>
+                <View style={[styles.header, { flex: 1 }]}>
                     <Text style={styles.title}>Antrenman & Beslenme</Text>
                     <View style={styles.tabContainer}>
                         <TouchableOpacity
@@ -515,7 +515,10 @@ export default function WorkoutsScreen() {
                     </View>
 
                     <ScrollView
-                        contentContainerStyle={styles.scrollContent}
+                        style={{ flex: 1 }}
+                        contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
+                        keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode="on-drag"
                         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
                     >
                         {activeTab === 'workout' ? renderWorkoutContent() :
@@ -529,7 +532,7 @@ export default function WorkoutsScreen() {
                             style={styles.modalOverlay}
                         >
                             <View style={[styles.modalContent, { maxHeight: '80%' }]}>
-                                <ScrollView showsVerticalScrollIndicator={false}>
+                                <ScrollView showsVerticalScrollIndicator={false} nestedScrollEnabled={true} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
                                     <Text style={styles.modalTitle}>Manuel Diyet Girişi</Text>
 
                                     <View style={styles.formGroup}>

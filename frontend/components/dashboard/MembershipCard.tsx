@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import Card from '@/components/common/Card';
 import { Membership } from '@/types';
+import { router } from 'expo-router';
 
 interface Props {
     membership: Membership | null;
@@ -45,45 +46,47 @@ export default function MembershipCard({ membership }: Props) {
     const config = getStatusConfig();
 
     return (
-        <Card glow={status === 'grace'}>
-            <View style={styles.header}>
-                <Ionicons name="card" size={22} color={config.color} />
-                <Text style={styles.title}>Üyelik Durumu</Text>
-                <View style={[styles.statusBadge, { backgroundColor: `${config.color}20` }]}>
-                    <Text style={[styles.statusText, { color: config.color }]}>{config.text}</Text>
-                </View>
-            </View>
-
-            <View style={styles.body}>
-                {/* Circular progress */}
-                <View style={styles.circleContainer}>
-                    <View style={styles.circleOuter}>
-                        <View style={styles.circleInner}>
-                            <Text style={[styles.daysNumber, { color: config.color }]}>{remaining_days}</Text>
-                            <Text style={styles.daysLabel}>gün kaldı</Text>
-                        </View>
+        <TouchableOpacity onPress={() => router.push('/membershipDetail' as any)}>
+            <Card glow={status === 'grace'}>
+                <View style={styles.header}>
+                    <Ionicons name="card" size={22} color={config.color} />
+                    <Text style={styles.title}>Üyelik Durumu</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: `${config.color}20` }]}>
+                        <Text style={[styles.statusText, { color: config.color }]}>{config.text}</Text>
                     </View>
                 </View>
 
-                <View style={styles.details}>
-                    <View style={styles.detailRow}>
-                        <Ionicons name="calendar-outline" size={16} color={Colors.textSecondary} />
-                        <Text style={styles.detailText}>Bitiş: {membership.end_date}</Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                        <Ionicons name="time-outline" size={16} color={Colors.textSecondary} />
-                        <Text style={styles.detailText}>Toplam: {total_days} gün</Text>
-                    </View>
-                    {status === 'grace' && (
-                        <View style={[styles.warningBox]}>
-                            <Text style={styles.warningText}>
-                                ⚠️ Ödeme gerekli! {membership.grace_days_remaining} gün tolerans kaldı.
-                            </Text>
+                <View style={styles.body}>
+                    {/* Circular progress */}
+                    <View style={styles.circleContainer}>
+                        <View style={styles.circleOuter}>
+                            <View style={styles.circleInner}>
+                                <Text style={[styles.daysNumber, { color: config.color }]}>{remaining_days}</Text>
+                                <Text style={styles.daysLabel}>gün kaldı</Text>
+                            </View>
                         </View>
-                    )}
+                    </View>
+
+                    <View style={styles.details}>
+                        <View style={styles.detailRow}>
+                            <Ionicons name="calendar-outline" size={16} color={Colors.textSecondary} />
+                            <Text style={styles.detailText}>Bitiş: {membership.end_date}</Text>
+                        </View>
+                        <View style={styles.detailRow}>
+                            <Ionicons name="time-outline" size={16} color={Colors.textSecondary} />
+                            <Text style={styles.detailText}>Toplam: {total_days} gün</Text>
+                        </View>
+                        {status === 'grace' && (
+                            <View style={[styles.warningBox]}>
+                                <Text style={styles.warningText}>
+                                    ⚠️ Ödeme gerekli! {membership.grace_days_remaining} gün tolerans kaldı.
+                                </Text>
+                            </View>
+                        )}
+                    </View>
                 </View>
-            </View>
-        </Card>
+            </Card>
+        </TouchableOpacity>
     );
 }
 

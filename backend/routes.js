@@ -1163,4 +1163,62 @@ router.get('/notifications/check-reminder', authMiddleware, async (req, res) => 
     }
 });
 
+// =================== INSTALLMENTS ===================
+
+router.get('/user/installments', authMiddleware, async (req, res) => {
+    try {
+        const db = getDb();
+        const { data } = await db.from('installments')
+            .select('*')
+            .eq('user_id', req.user.id)
+            .order('due_date', { ascending: true });
+        res.json(data || []);
+    } catch (err) {
+        res.status(500).json({ error: 'Taksitler yüklenemedi' });
+    }
+});
+
+router.post('/admin/pay-installment/:id', authMiddleware, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+            return res.status(403).json({ error: 'Yetkisiz işlem' });
+        }
+        const db = getDb();
+        const instId = req.params.id;
+
+        const { data: inst } = await db.from('installments').select('*').eq('id', instId).single();
+        if (!inst) return res.status(404).json({ error: 'Taksit bulunamadı' });
+
+        await db.from('installments').update({
+            status: 'paid',
+            paid_at: new Date().toISOString()
+        }).eq('id', instId);
+
+        // Update membership amount
+        await db.rpc('increment_membership_amount', {
+            m_id: inst.membership_id,
+            inc_amount: inst.amount
+        });
+
+        res.json({ message: 'Taksit ödendi olarak işaretlendi' });
+    } catch (err) {
+        res.status(500).json({ error: 'İşlem başarısız' });
+    }
+});
+
+router.get('/admin/user-installments/:userId', authMiddleware, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+            return res.status(403).json({ error: 'Yetkisiz işlem' });
+        }
+        const { data } = await getDb().from('installments')
+            .select('*')
+            .eq('user_id', req.params.userId)
+            .order('due_date', { ascending: true });
+        res.json(data || []);
+    } catch (err) {
+        res.status(500).json({ error: 'Yüklenemedi' });
+    }
+});
+
 module.exports = router;
