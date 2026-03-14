@@ -1,0 +1,13 @@
+FAILED TO REQUIRE ROUTES:
+supabaseUrl is required.
+Error: supabaseUrl is required.
+    at validateSupabaseUrl (C:\Users\UNLOST\Desktop\matchsport\backend\node_modules\@supabase\supabase-js\dist\index.cjs:146:25)
+    at new SupabaseClient (C:\Users\UNLOST\Desktop\matchsport\backend\node_modules\@supabase\supabase-js\dist\index.cjs:362:19)
+    at createClient (C:\Users\UNLOST\Desktop\matchsport\backend\node_modules\@supabase\supabase-js\dist\index.cjs:555:9)
+    at Object.<anonymous> (C:\Users\UNLOST\Desktop\matchsport\backend\database.js:11:18)
+    at Module._compile (node:internal/modules/cjs/loader:1812:14)
+    at Object..js (node:internal/modules/cjs/loader:1943:10)
+    at Module.load (node:internal/modules/cjs/loader:1533:32)
+    at Module._load (node:internal/modules/cjs/loader:1335:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.require (node:internal/modules/cjs/loader:1556:12)

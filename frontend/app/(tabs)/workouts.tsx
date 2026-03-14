@@ -464,9 +464,15 @@ export default function WorkoutsScreen() {
                     nutritionLogs.map(log => (
                         <Card key={log.id} style={styles.logCard}>
                             <View style={styles.logHeader}>
-                                <View>
+                                <View style={{ flex: 1 }}>
                                     <Text style={styles.logMealType}>{log.meal_type || 'Öğün'}</Text>
                                     <Text style={styles.logFoodName}>{log.food_items?.name || log.raw_text || 'İsimsiz Besin'}</Text>
+                                    {log.ai_feedback && (
+                                        <View style={styles.aiFeedbackContainer}>
+                                            <Ionicons name="sparkles" size={14} color={Colors.primary} />
+                                            <Text style={styles.aiFeedbackText}>{log.ai_feedback}</Text>
+                                        </View>
+                                    )}
                                 </View>
                                 <View style={{ alignItems: 'flex-end' }}>
                                     <Text style={styles.logCalories}>{log.calories} kcal</Text>
@@ -1148,6 +1154,21 @@ const styles = StyleSheet.create({
     closeBtnText: {
         color: Colors.text,
         fontWeight: '700',
+    },
+    aiFeedbackContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: 'rgba(255, 107, 53, 0.05)',
+        padding: 8,
+        borderRadius: 8,
+        marginTop: 8,
+    },
+    aiFeedbackText: {
+        color: Colors.primary,
+        fontSize: 12,
+        fontWeight: '600',
+        flex: 1,
     },
     modalFooter: {
         flexDirection: 'row',

@@ -71,10 +71,14 @@ BEGIN
   END IF;
 
   -- Determine months from package_type (flexible matching)
-  IF NEW.package_type ILIKE '%12_month%' OR NEW.package_type ILIKE '%1_yil%' THEN v_months := 12;
-  ELSIF NEW.package_type ILIKE '%6_month%' THEN v_months := 6;
-  ELSIF NEW.package_type ILIKE '%3_month%' THEN v_months := 3;
-  ELSE v_months := 1;
+  IF NEW.package_type ILIKE '%12_month%' OR NEW.package_type ILIKE '%1_yil%' OR NEW.package_type ILIKE '%6+6%' THEN 
+    v_months := 12;
+  ELSIF NEW.package_type ILIKE '%6_month%' THEN 
+    v_months := 6;
+  ELSIF NEW.package_type ILIKE '%3_month%' THEN 
+    v_months := 3;
+  ELSE 
+    v_months := 1;
   END IF;
 
   -- Get current active membership for the user
@@ -96,10 +100,10 @@ BEGIN
       status = 'active',
       package_type = NEW.package_type,
       amount = COALESCE(amount, 0) + NEW.amount,
-      -- New debt fields if given
-      total_price = COALESCE(NEW.total_price, COALESCE(total_price, 0)),
+      -- FIX: Use NULLIF to prevent 0 from overriding previous total_price
+      total_price = COALESCE(NULLIF(NEW.total_price, 0), COALESCE(total_price, 0)),
       next_payment_date = CASE 
-        WHEN COALESCE(NEW.total_price, COALESCE(total_price, 0)) > (COALESCE(amount, 0) + NEW.amount)
+        WHEN COALESCE(NULLIF(NEW.total_price, 0), COALESCE(total_price, 0)) > (COALESCE(amount, 0) + NEW.amount)
         THEN CURRENT_DATE + '30 days'::INTERVAL
         ELSE NULL
       END
@@ -113,8 +117,8 @@ BEGIN
     INSERT INTO memberships (user_id, start_date, end_date, total_days, remaining_days, status, package_type, amount, total_price, next_payment_date)
     VALUES (
       NEW.user_id, CURRENT_DATE, v_new_end, v_months * 30, v_remaining, 'active', NEW.package_type, NEW.amount, 
-      COALESCE(NEW.total_price, NEW.amount),
-      CASE WHEN COALESCE(NEW.total_price, NEW.amount) > NEW.amount THEN CURRENT_DATE + '30 days'::INTERVAL ELSE NULL END
+      COALESCE(NULLIF(NEW.total_price, 0), NEW.amount),
+      CASE WHEN COALESCE(NULLIF(NEW.total_price, 0), NEW.amount) > NEW.amount THEN CURRENT_DATE + '30 days'::INTERVAL ELSE NULL END
     )
     RETURNING id INTO NEW.membership_id;
   END IF;

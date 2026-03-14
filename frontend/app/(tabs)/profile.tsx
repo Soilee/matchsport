@@ -44,8 +44,8 @@ export default function ProfileScreen() {
         }
     }, []);
 
-    const handleLogout = () => {
-        setAuthToken('');
+    const handleLogout = async () => {
+        await setAuthToken(null);
         router.replace('/login');
     };
 

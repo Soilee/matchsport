@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, ScrollView, View, Text, RefreshControl, ActivityIndicator, TouchableOpacity, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,7 +15,7 @@ import MembershipCard from '@/components/dashboard/MembershipCard';
 import HeatmapCard from '@/components/dashboard/HeatmapCard';
 import AdminDashboard from '@/components/dashboard/AdminDashboard';
 import TrainerDashboard from '@/components/dashboard/TrainerDashboard';
-import { getDashboard } from '@/services/api';
+import { getDashboard, getTasks, completeTask } from '@/services/api';
 import { DashboardData, User } from '@/types';
 import { router } from 'expo-router';
 
@@ -43,14 +43,19 @@ export default function DashboardScreen() {
   const [data, setData] = useState<ExtendedDashboardData | null>(null);
   const [tasks, setTasks] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const lastFetch = useRef(0);
 
   const loadData = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastFetch.current < 2000) return; // Rate limit 2s
+    lastFetch.current = now;
+
     try {
       setError(null);
 
       const [dashboardData, tasksData] = await Promise.all([
         getDashboard(),
-        import('@/services/api').then(api => api.getTasks())
+        getTasks()
       ]);
 
       setData(dashboardData);
@@ -70,15 +75,20 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    const userId = data?.user?.id;
+    if (!userId) return;
 
     const membershipSub = import('@/services/supabase').then(({ supabase }) => {
       return supabase
-        .channel('memberships_changes')
+        .channel(`memberships_${userId}`)
         .on('postgres_changes', {
           event: '*',
           schema: 'public',
           table: 'memberships',
-          filter: `user_id=eq.${data?.user?.id}`
+          filter: `user_id=eq.${userId}`
         }, (payload) => {
           console.log('Real-time: Membership updated!', payload);
           loadData();
@@ -104,7 +114,7 @@ export default function DashboardScreen() {
       membershipSub.then(sub => (sub as any).unsubscribe?.());
       occupancySub.then(sub => (sub as any).unsubscribe?.());
     };
-  }, [loadData, data?.user?.id]);
+  }, [data?.user?.id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -186,7 +196,7 @@ export default function DashboardScreen() {
 
               {/* DEBT WIDGET */}
               {(() => {
-                const membership = data?.user?.memberships?.[0];
+                const membership = data?.membership;
                 if (!membership) return null;
                 const remainingDebt = (membership.total_price || 0) - (membership.amount || 0);
                 if (remainingDebt > 0) {
@@ -210,7 +220,7 @@ export default function DashboardScreen() {
                 return null;
               })()}
 
-              <MembershipCard membership={(data?.user?.memberships?.[0] as any) || null} />
+              <MembershipCard membership={data?.membership || null} />
 
               <MinimalistOccupancy
                 currentCount={data?.occupancy?.current_count || 0}
@@ -225,7 +235,6 @@ export default function DashboardScreen() {
                   completed={tasks[0].is_completed}
                   onToggle={async () => {
                     try {
-                      const { completeTask } = await import('@/services/api');
                       await completeTask(tasks[0].id);
                       setTasks(prev => prev.map(t => t.id === tasks[0].id ? { ...t, is_completed: true } : t));
                     } catch (e) {

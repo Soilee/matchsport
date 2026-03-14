@@ -3,6 +3,7 @@ const { getDb } = require('./database');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'matchsport-secret-key-2026';
@@ -193,7 +194,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             notifRes
         ] = await Promise.all([
             db.from('users').select('id, full_name, nickname, email, phone, role, profile_photo_url, kvkk_mask').eq('id', userId).single(),
-            db.from('memberships').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+            db.from('memberships').select('*').eq('user_id', userId).order('end_date', { ascending: false }).limit(1).maybeSingle(),
             db.from('gym_occupancy').select('current_count, max_capacity').order('recorded_at', { ascending: false }).limit(1).maybeSingle(),
             db.from('gym_occupancy').select('hour_of_day, day_of_week, avg_count:current_count'),
             db.from('workout_programs').select('*').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle(),
@@ -208,6 +209,17 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
         ]);
 
         const user = userRes.data;
+        let membership = membershipRes.data;
+
+        if (membership && membership.end_date) {
+            const todayAtMidnight = new Date();
+            todayAtMidnight.setHours(0, 0, 0, 0);
+            const endDate = new Date(membership.end_date);
+            if (!isNaN(endDate.getTime())) {
+                membership.remaining_days = Math.max(0, Math.ceil((endDate.getTime() - todayAtMidnight.getTime()) / (1000 * 60 * 60 * 24)));
+            }
+        }
+
         const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
         const today = dayNames[new Date().getDay()];
         let todayWorkout = null;
@@ -259,7 +271,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
 
         res.json({
             user,
-            membership: membershipRes.data,
+            membership,
             occupancy: occRes.data || { current_count: 0, max_capacity: 100 },
             liveOccupancy: liveOccupancy || 0,
             heatmap: heatmapRes.data || [],
@@ -286,7 +298,7 @@ router.post('/checkin', authMiddleware, async (req, res) => {
     try {
         const db = getDb();
         const userId = req.user.id;
-        const { data: membership } = await db.from('memberships').select('*').eq('user_id', userId).in('status', ['active', 'grace']).order('created_at', { ascending: false }).limit(1).maybeSingle();
+        const { data: membership } = await db.from('memberships').select('*').eq('user_id', userId).in('status', ['active', 'grace']).order('end_date', { ascending: false }).limit(1).maybeSingle();
         if (!membership) return res.status(403).json({ error: 'Aktif üyeliğiniz yok' });
 
         const { data: openCheck } = await db.from('check_ins').select('*').eq('user_id', userId).is('check_out_time', null).limit(1).maybeSingle();
@@ -465,6 +477,17 @@ router.get('/tasks', authMiddleware, async (req, res) => {
         res.json(data || []);
     } catch (err) {
         res.status(500).json({ error: 'Görevler yüklenemedi' });
+    }
+});
+
+router.post('/tasks/:id/complete', authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { error } = await getDb().from('daily_tasks').update({ is_completed: true }).eq('id', id);
+        if (error) throw error;
+        res.json({ message: 'Görev tamamlandı' });
+    } catch (err) {
+        res.status(500).json({ error: 'İşlem başarısız' });
     }
 });
 
@@ -668,10 +691,10 @@ router.post('/admin/payments', authMiddleware, requireRole('admin', 'trainer'), 
             payment_method: payment_method || 'cash',
             package_type: package_type || 'Standart',
             payment_type: payment_type || 'cash_full',
-            installment_count: installment_count || 1,
+            installment_count: parseInt(installment_count || 1),
             total_price: safeTotalPrice,
             processed_by: req.user.id,
-            status: 'pending',
+            status: 'completed', // Direct complete as requested
             notes: notes || null
         }).select().single();
 
@@ -848,10 +871,10 @@ router.post('/admin/assign-diet', authMiddleware, requireRole('admin', 'trainer'
             plan_name,
             description,
             meals: meals || [],
-            protein_g: protein_g || 0,
-            carbs_g: carbs_g || 0,
-            fat_g: fat_g || 0,
-            daily_calories: daily_calories || 0,
+            protein_g: parseFloat(protein_g || 0),
+            carbs_g: parseFloat(carbs_g || 0),
+            fat_g: parseFloat(fat_g || 0),
+            daily_calories: parseInt(daily_calories || 0),
             is_active: true
         }).select().single();
 
@@ -987,7 +1010,7 @@ router.get('/admin/user-nutrition/:id', authMiddleware, requireRole('admin', 'tr
     }
 });
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+
 
 router.post('/nutrition/ai-log-meal', authMiddleware, async (req, res) => {
     try {
@@ -1026,7 +1049,12 @@ router.post('/nutrition/ai-log-meal', authMiddleware, async (req, res) => {
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-        const prompt = `Lütfen şu yediğim yemeği veya ifadeyi besin değerleri (makrolar) açısından analiz et ve sadece JSON dön. JSON formatı kesinlikle şu olmalı: {"protein_g": sayi, "carbs_g": sayi, "fat_g": sayi, "calories": sayi}\nİfade: "${text}"`;
+        // Get user info for context
+        const { data: userStats } = await db.from('users').select('height_cm, weight_kg').eq('id', req.user.id).single();
+
+        const prompt = `Lütfen şu yediğim yemeği veya ifadeyi besin değerleri (makrolar) açısından analiz et ve sadece JSON dön. JSON formatı kesinlikle şu olmalı: {"protein_g": sayi, "carbs_g": sayi, "fat_g": sayi, "calories": sayi, "feedback": "Kisa Türkce feedback (Örn: Yuksek proteinli harika bir secim)"}
+        Kullanici Bilgisi: Kilo ${userStats?.weight_kg || 'Bilinmiyor'}kg, Boy ${userStats?.height_cm || 'Bilinmiyor'}cm
+        İfade: "${text}"`;
 
         const result = await model.generateContent(prompt);
         const responseText = result.response.text();
@@ -1044,6 +1072,7 @@ router.post('/nutrition/ai-log-meal', authMiddleware, async (req, res) => {
             carbs_g: macros.carbs_g,
             fat_g: macros.fat_g,
             calories: macros.calories,
+            ai_feedback: macros.feedback || null,
             log_date: today
         }).select().single();
 

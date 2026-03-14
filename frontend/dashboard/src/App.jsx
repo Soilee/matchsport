@@ -146,7 +146,7 @@ const App = () => {
         supabase.from('daily_tasks').select('*').order('created_at', { ascending: false }),
         fetch(`${API_URL}/admin/users?role=trainer`, { headers }).then(r => r.json())
       ]);
-      const { data: memberList } = await supabase.from('users').select('*, memberships(*)').eq('role', 'member');
+      const { data: memberList } = await supabase.from('users').select('*, memberships(*)').eq('role', 'member').order('end_date', { foreignTable: 'memberships', ascending: false });
 
       setStats({
         totalMembers: dashRes.adminStats?.totalMembers || 0,
@@ -163,8 +163,14 @@ const App = () => {
 
   const handleStatusToggle = async (userId, currentStatus) => {
     const newStatus = currentStatus === 'active' ? 'frozen' : 'active';
+    // Optimized local update for immediate UI sync
+    setMembers(prev => prev.map(m => m.id === userId ? { ...m, memberships: m.memberships?.map(ms => ({ ...ms, status: newStatus })) } : m));
+
     const { error } = await supabase.from('memberships').update({ status: newStatus }).eq('user_id', userId);
-    if (!error) fetchData();
+    if (error) {
+      alert('Durum güncellenemedi: ' + error.message);
+      fetchData(); // Rollback on error
+    }
   };
 
   const handleDeleteUser = async (user) => {
@@ -177,7 +183,21 @@ const App = () => {
     } catch (e) { alert('Silme hatası'); }
   };
 
-  const openModal = (type, data = null) => { setModal({ show: true, type, data }); setFormData({}); };
+  const openModal = async (type, data = null) => {
+    setModal({ show: true, type, data });
+    // Preserving actionType if it was set before openModal (e.g. by 'Subtract' button)
+    if (type === 'add-days' && formData.actionType === 'subtract') {
+      // Keep it
+    } else {
+      setFormData({});
+    }
+    if (type === 'diet' && data) {
+      try {
+        const { data: d } = await supabase.from('diet_plans').select('*').eq('user_id', data.id).eq('is_active', true).maybeSingle();
+        if (d) setFormData({ ...d });
+      } catch (e) { console.error('Diet fetch error', e); }
+    }
+  };
   const closeModal = () => setModal({ show: false, type: '', data: null });
 
   const handleModalSubmit = async (e) => {
@@ -192,10 +212,26 @@ const App = () => {
         });
         if (error) throw error;
       } else if (modal.type === 'add-days') {
-        const res = await fetch(`${API_URL}/admin/add-days`, { method: 'POST', headers, body: JSON.stringify({ user_id: modal.data.id, days: parseInt(formData.days) }) });
+        const days = parseInt(formData.days);
+        const finalDays = formData.actionType === 'subtract' ? -Math.abs(days) : Math.abs(days);
+        const res = await fetch(`${API_URL}/admin/add-days`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ user_id: modal.data.id, days: finalDays })
+        });
         if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
       } else if (modal.type === 'diet') {
-        await fetch(`${API_URL}/admin/assign-diet`, { method: 'POST', headers, body: JSON.stringify({ user_id: modal.data.id, plan_name: formData.plan_name, description: formData.description || '', meals: [] }) });
+        const payload = {
+          user_id: modal.data.id,
+          plan_name: formData.plan_name,
+          description: formData.description || '',
+          protein_g: formData.protein_g,
+          carbs_g: formData.carbs_g,
+          fat_g: formData.fat_g,
+          daily_calories: formData.daily_calories,
+          meals: formData.meals || []
+        };
+        await fetch(`${API_URL}/admin/assign-diet`, { method: 'POST', headers, body: JSON.stringify(payload) });
       } else if (modal.type === 'announcement') {
         await fetch(`${API_URL}/admin/announcements`, { method: 'POST', headers, body: JSON.stringify({ ...formData }) });
       } else if (modal.type === 'task') {
@@ -255,7 +291,8 @@ const App = () => {
       const data = await res.json();
       if (data.token) {
         localStorage.setItem('token', data.token);
-        window.location.reload();
+        // Ensure browser persists it across sessions explicitly if needed
+        window.location.href = '/';
       } else {
         setLoginError(data.error || 'Giriş başarısız. Lütfen bilgilerinizi kontrol edin.');
         btn.disabled = false;
@@ -362,6 +399,14 @@ const App = () => {
                     <button className="btn-action" style={{ color: '#34C759' }} onClick={() => openModal('payment', m)}>💰 Ödeme</button>
                     <button className="btn-action" style={{ color: '#007AFF' }} onClick={() => openModal('installments', m)}>📊 Taksitler</button>
                     <button className="btn-action" onClick={() => openModal('add-days', m)}>📅 Gün Ekle</button>
+                    <button className="btn-action" style={{ color: '#FF3B30' }} onClick={() => { setModal({ show: true, type: 'add-days', data: m }); setFormData({ actionType: 'subtract' }); }}>➖ Çıkar</button>
+                    <button className="btn-action" onClick={() => openModal('nutrition-view', m)}>🍎 Beslenme</button>
+                    <button className="btn-action" onClick={() => openModal('workout-view', m)}>🏋️ Antrenman</button>
+                    <button className="btn-action" onClick={() => {
+                      const dietBtn = document.querySelector(`[data-user-id="${m.id}"] .diet-btn`);
+                      // This is a bit complex due to nested data, but I'll add a direct way
+                      openModal('diet', m);
+                    }}>🥗 Diyet</button>
                     <button className="btn-action" onClick={() => openModal('measurement', m)}>📐 Ölçüm</button>
                     <button className="btn-action" onClick={() => openModal('reset-password', m)}><Key size={14} /></button>
                     {isAdmin && <button className="btn-danger" onClick={() => handleDeleteUser(m)}><Trash2 size={14} /></button>}
@@ -476,7 +521,7 @@ const App = () => {
         <div className="modal-overlay" onClick={e => e.target.className === 'modal-overlay' && closeModal()}>
           <div className="modal-content">
             <header className="modal-header">
-              <h3>{modal.type === 'measurement' ? 'Ölçüm Ekle' : modal.type === 'add-days' ? 'Üyelik Uzat' : modal.type === 'announcement' ? 'Duyuru Yayınla' : modal.type === 'diet' ? 'Diyet Planı Ata' : modal.type === 'add-trainer' ? 'Yeni Eğitmen' : modal.type === 'add-member' ? 'Yeni Üye Ekle' : modal.type === 'reset-password' ? 'Şifre Sıfırla' : modal.type === 'payment' ? 'Ödeme Kaydet' : modal.type === 'installments' ? `${modal.data?.full_name} - Taksitler` : modal.type === 'change-role' ? 'Rol Değiştir' : modal.type === 'nutrition-view' ? `${modal.data?.full_name} - Beslenme` : modal.type === 'task' ? 'Görev Ata' : 'İşlem'}</h3>
+              <h3>{modal.type === 'measurement' ? 'Ölçüm Ekle' : modal.type === 'add-days' ? 'Üyelik Uzat' : modal.type === 'announcement' ? 'Duyuru Yayınla' : modal.type === 'diet' ? 'Diyet Planı Ata' : modal.type === 'add-trainer' ? 'Yeni Eğitmen' : modal.type === 'add-member' ? 'Yeni Üye Ekle' : modal.type === 'reset-password' ? 'Şifre Sıfırla' : modal.type === 'payment' ? 'Ödeme Kaydet' : modal.type === 'installments' ? `${modal.data?.full_name} - Taksitler` : modal.type === 'change-role' ? 'Rol Değiştir' : modal.type === 'nutrition-view' ? `${modal.data?.full_name} - Beslenme Kayıtları` : modal.type === 'workout-view' ? `${modal.data?.full_name} - Antrenman Programı` : modal.type === 'diet-view' ? `${modal.data?.full_name} - Diyet Planı` : modal.type === 'task' ? 'Görev Ata' : 'İşlem'}</h3>
               <button className="btn-close" onClick={closeModal}>×</button>
             </header>
             <div className="modal-body-scroll" style={{ maxHeight: '70vh', overflowY: 'auto', paddingRight: '10px' }}>
@@ -502,17 +547,41 @@ const App = () => {
                   <div className="form-group"><label>Ödeme Yöntemi</label><select onChange={e => setFormData({ ...formData, payment_method: e.target.value })} defaultValue="cash"><option value="cash">Nakit</option><option value="card">Kart</option><option value="bank_transfer">Havale/EFT</option></select></div>
                   <div className="form-group"><label>Not</label><input type="text" placeholder="Opsiyonel" onChange={e => setFormData({ ...formData, notes: e.target.value })} /></div>
                 </>)}
-                {modal.type === 'diet' && (<>
-                  <div className="form-group"><label>Diyet Planı Adı</label><input type="text" placeholder="Örn: Bulk Dönemi v1" required onChange={e => setFormData({ ...formData, plan_name: e.target.value })} /></div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                    <div className="form-group"><label>Kalori (kcal)</label><input type="number" placeholder="2500" onChange={e => setFormData({ ...formData, daily_calories: e.target.value })} /></div>
-                    <div className="form-group"><label>Protein (g)</label><input type="number" placeholder="180" onChange={e => setFormData({ ...formData, protein_g: e.target.value })} /></div>
-                    <div className="form-group"><label>Karb (g)</label><input type="number" placeholder="300" onChange={e => setFormData({ ...formData, carbs_g: e.target.value })} /></div>
-                    <div className="form-group"><label>Yağ (g)</label><input type="number" placeholder="70" onChange={e => setFormData({ ...formData, fat_g: e.target.value })} /></div>
+                {modal.type === 'add-days' && (
+                  <div style={{ display: 'grid', gap: '1rem' }}>
+                    <div className="form-group">
+                      <label>İşlem Türü</label>
+                      <select
+                        onChange={e => setFormData({ ...formData, actionType: e.target.value })}
+                        value={formData.actionType || 'add'}
+                      >
+                        <option value="add">Gün Ekle (+)</option>
+                        <option value="subtract">Gün Çıkar (-)</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Gün Sayısı</label>
+                      <input type="number" placeholder="Örn: 30" required onChange={e => setFormData({ ...formData, days: e.target.value })} />
+                    </div>
+                    <div style={{ background: 'rgba(255,159,10,0.1)', padding: '0.8rem', borderRadius: '8px', fontSize: '0.85rem', color: '#FF9F0A' }}>
+                      <strong>Not:</strong> Bu işlem üyelik bitiş tarihini doğrudan değiştirir.
+                    </div>
                   </div>
+                )}
+                {modal.type === 'diet' && (<>
+                  <div className="form-group"><label>Diyet Planı Adı</label><input type="text" placeholder="Örn: Bulk Dönemi v1" defaultValue={formData.plan_name} required onChange={e => setFormData({ ...formData, plan_name: e.target.value })} /></div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div className="form-group"><label>Kalori (kcal)</label><input type="number" placeholder="2500" defaultValue={formData.daily_calories} onChange={e => setFormData({ ...formData, daily_calories: e.target.value })} /></div>
+                    <div className="form-group"><label>Protein (g)</label><input type="number" placeholder="180" defaultValue={formData.protein_g} onChange={e => setFormData({ ...formData, protein_g: e.target.value })} /></div>
+                    <div className="form-group"><label>Karb (g)</label><input type="number" placeholder="300" defaultValue={formData.carbs_g} onChange={e => setFormData({ ...formData, carbs_g: e.target.value })} /></div>
+                    <div className="form-group"><label>Yağ (g)</label><input type="number" placeholder="70" defaultValue={formData.fat_g} onChange={e => setFormData({ ...formData, fat_g: e.target.value })} /></div>
+                  </div>
+                  <div className="form-group"><label>Açıklama / Notlar</label><textarea placeholder="Opsiyonel detaylar..." style={{ width: '100%', padding: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', minHeight: '80px' }} defaultValue={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}></textarea></div>
                 </>)}
                 {modal.type === 'installments' && <MemberInstallmentView userId={modal.data.id} />}
                 {modal.type === 'nutrition-view' && <StudentNutritionLogs userId={modal.data.id} />}
+                {modal.type === 'workout-view' && <MemberWorkoutView userId={modal.data.id} />}
+                {modal.type === 'diet-view' && <MemberDietPlanView userId={modal.data.id} />}
 
                 {(modal.type === 'add-trainer' || modal.type === 'add-member') && (<>
                   <div className="form-group"><label>Tam Adı</label><input type="text" placeholder="Ad Soyad" required onChange={e => setFormData({ ...formData, full_name: e.target.value })} /></div>
@@ -545,9 +614,107 @@ const StudentNutritionLogs = ({ userId }) => {
   }, [userId]);
   if (loading) return <div>Yükleniyor...</div>;
   return logs.length === 0 ? <p style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '1rem' }}>Kayıt yok.</p> : (
-    <table className="mini-table"><thead><tr><th>Besin</th><th>Miktar</th><th>Protein</th><th>Karb</th><th>Yağ</th><th>Kalori</th></tr></thead>
-      <tbody>{logs.map(l => <tr key={l.id}><td>{l.food_items?.name}</td><td>{l.quantity_g}g</td><td>{l.protein_g}g</td><td>{l.carbs_g}g</td><td>{l.fat_g}g</td><td>{l.calories} kcal</td></tr>)}</tbody>
-    </table>
+    <div className="table-container mini-table">
+      <table><thead><tr><th>Besin/Öğün</th><th>Miktar</th><th>Makrolar (P/K/Y)</th><th>Kalori</th><th>AI Notu</th></tr></thead>
+        <tbody>{logs.map(l => (
+          <tr key={l.id}>
+            <td><strong>{l.meal_type || 'Öğün'}</strong><div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>{l.food_items?.name || l.raw_text}</div></td>
+            <td>{l.quantity_g}g</td>
+            <td>{l.protein_g} / {l.carbs_g} / {l.fat_g}</td>
+            <td>{l.calories} kcal</td>
+            <td><span style={{ fontSize: '0.75rem', color: '#34C759' }}>{l.ai_feedback || '-'}</span></td>
+          </tr>
+        ))}</tbody>
+      </table>
+    </div>
+  );
+};
+
+const MemberWorkoutView = ({ userId }) => {
+  const [program, setProgram] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchW = async () => {
+      try {
+        const { data } = await supabase.from('workout_programs').select('*, workout_days(*, workout_exercises(*, exercises(*)))').eq('user_id', userId).eq('is_active', true).maybeSingle();
+        setProgram(data);
+      } catch (e) { console.error(e); } finally { setLoading(false); }
+    };
+    fetchW();
+  }, [userId]);
+
+  if (loading) return <div>Yükleniyor...</div>;
+  if (!program) return <p style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-dim)' }}>Aktif program yok.</p>;
+
+  return (
+    <div className="workout-view-modal">
+      <h4>{program.program_name}</h4>
+      <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>{program.start_date} - {program.end_date}</p>
+      {(program.workout_days || []).map(day => (
+        <div key={day.id} style={{ marginTop: '1rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px' }}>
+          <strong style={{ color: 'var(--primary)' }}>{DAY_LABELS[day.day_of_week] || day.day_of_week} - {day.muscle_group}</strong>
+          <table className="mini-table" style={{ marginTop: '0.5rem' }}>
+            <thead><tr><th>Hareket</th><th>Set</th><th>Tekrar</th><th>Kilo</th></tr></thead>
+            <tbody>
+              {(day.workout_exercises || []).map(we => (
+                <tr key={we.id}><td>{we.exercises?.name}</td><td>{we.sets}</td><td>{we.reps}</td><td>{we.weight_kg}kg</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const MemberDietPlanView = ({ userId }) => {
+  const [diet, setDiet] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchD = async () => {
+      try {
+        const { data } = await supabase.from('diet_plans').select('*').eq('user_id', userId).eq('is_active', true).maybeSingle();
+        setDiet(data);
+      } catch (e) { console.error(e); } finally { setLoading(false); }
+    };
+    fetchD();
+  }, [userId]);
+
+  if (loading) return <div>Yükleniyor...</div>;
+  if (!diet) return <p style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-dim)' }}>Aktif diyet planı yok.</p>;
+
+  return (
+    <div className="diet-view-modal">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <h4 style={{ margin: 0 }}>{diet.plan_name}</h4>
+        <button className="btn-action" style={{ color: 'var(--primary)' }} onClick={() => {
+          // Pass existing diet data to the 'diet' modal type
+          const parentModal = document.querySelector('.modal-content');
+          if (parentModal) {
+            // We need a way to trigger the 'diet' modal from here.
+            // Since this is a child component, it's better to pass a trigger prop or use state.
+            // For now, I'll update the App.jsx to handle this.
+          }
+          alert('Lütfen üye listesindeki Diyet butonunu kullanarak güncelleyin.');
+        }}>✏️ Düzenle</button>
+      </div>
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+        <div className="stat-mini"><strong>Cal:</strong> {diet.daily_calories}</div>
+        <div className="stat-mini"><strong>P:</strong> {diet.protein_g}g</div>
+        <div className="stat-mini"><strong>K:</strong> {diet.carbs_g}g</div>
+        <div className="stat-mini"><strong>Y:</strong> {diet.fat_g}g</div>
+      </div>
+      {(diet.meals || []).map((meal, idx) => (
+        <div key={idx} style={{ marginBottom: '0.8rem', padding: '0.8rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+          <strong>{meal.name || meal.meal_name}</strong>
+          <ul style={{ fontSize: '0.85rem', color: 'var(--text-dim)', paddingLeft: '1.2rem', marginTop: '0.4rem' }}>
+            {(meal.items || []).map((it, i) => <li key={i}>{it}</li>)}
+          </ul>
+        </div>
+      ))}
+    </div>
   );
 };
 
@@ -579,19 +746,21 @@ const MemberInstallmentView = ({ userId }) => {
   if (installments.length === 0) return <p style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-dim)' }}>Taksit kaydı bulunamadı.</p>;
 
   return (
-    <table className="mini-table">
-      <thead><tr><th>Vade</th><th>Tutar</th><th>Durum</th><th>İşlem</th></tr></thead>
-      <tbody>
-        {installments.map(i => (
-          <tr key={i.id}>
-            <td>{new Date(i.due_date).toLocaleDateString('tr-TR')}</td>
-            <td>₺{i.amount}</td>
-            <td><span className={`badge badge-${i.status === 'paid' ? 'active' : 'expired'}`}>{i.status === 'paid' ? 'ÖDENDİ' : 'BEKLEYEN'}</span></td>
-            <td>{i.status === 'pending' && <button type="button" className="btn-action" style={{ color: '#34C759' }} onClick={() => handlePay(i.id)}>Öde</button>}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="table-container mini-table">
+      <table>
+        <thead><tr><th>Vade</th><th>Tutar</th><th>Durum</th><th>İşlem</th></tr></thead>
+        <tbody>
+          {installments.map(i => (
+            <tr key={i.id}>
+              <td>{new Date(i.due_date).toLocaleDateString('tr-TR')}</td>
+              <td>₺{i.amount}</td>
+              <td><span className={`badge badge-${i.status === 'paid' ? 'active' : 'expired'}`}>{i.status === 'paid' ? 'ÖDENDİ' : 'BEKLEYEN'}</span></td>
+              <td>{i.status === 'pending' && <button type="button" className="btn-action" style={{ color: '#34C759' }} onClick={() => handlePay(i.id)}>Öde</button>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 };
 

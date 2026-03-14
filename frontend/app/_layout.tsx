@@ -43,15 +43,20 @@ export default function RootLayout() {
   return <RootLayoutNav />;
 }
 
+import { router } from 'expo-router';
+import { loadStoredToken } from '@/services/api';
+import { useState } from 'react';
+import { View, ActivityIndicator } from 'react-native';
+
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="workouts/manual" options={{ headerShown: false, presentation: 'card' }} />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="login" />
+        <Stack.Screen name="workouts/manual" options={{ presentation: 'card' }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
     </ThemeProvider>

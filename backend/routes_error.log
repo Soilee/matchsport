@@ -1,0 +1,15 @@
+C:\Users\UNLOST\Desktop\matchsport\backend\routes.js:991
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+        ^
+
+SyntaxError: Identifier 'GoogleGenerativeAI' has already been declared
+    at wrapSafe (node:internal/modules/cjs/loader:1743:18)
+    at Module._compile (node:internal/modules/cjs/loader:1786:20)
+    at Object..js (node:internal/modules/cjs/loader:1943:10)
+    at Module.load (node:internal/modules/cjs/loader:1533:32)
+    at Module._load (node:internal/modules/cjs/loader:1335:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.require (node:internal/modules/cjs/loader:1556:12)
+    at require (node:internal/modules/helpers:152:16)
+    at Object.<anonymous> (C:\Users\UNLOST\Desktop\matchsport\backend\server.js:20:20)
+    at Module._compile (node:internal/modules/cjs/loader:1812:14)

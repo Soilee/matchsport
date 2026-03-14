@@ -1,0 +1,3 @@
+-- ADD AI FEEDBACK COLUMN TO NUTRITION LOGS
+ALTER TABLE public.nutrition_logs ADD COLUMN IF NOT EXISTS ai_feedback TEXT;
+ALTER TABLE public.nutrition_logs ADD COLUMN IF NOT EXISTS raw_text TEXT;

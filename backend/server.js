@@ -14,9 +14,7 @@ app.use(express.json());
 // Initialize DB and seed
 initializeDatabase();
 // seedDatabase(); // Disabled legacy seed, use supabase_seed.js instead
-
 // Routes
-app.get('/api', (req, res) => res.json({ status: 'Matchless Fitness API v1.0' }));
 app.use('/api', routes);
 
 // Health check

@@ -26,6 +26,8 @@ export interface Membership {
     status: 'active' | 'grace' | 'expired' | 'frozen';
     grace_days_remaining: number;
     amount: number;
+    total_price?: number;
+    next_payment_date?: string;
 }
 
 export interface HeatmapData {
