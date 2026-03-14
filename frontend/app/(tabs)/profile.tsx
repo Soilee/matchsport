@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, ScrollView, RefreshControl, ActivityIndicator, Image, TouchableOpacity, Modal, TextInput, Switch, Alert } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, RefreshControl, ActivityIndicator, Image, TouchableOpacity, Modal, TextInput, Switch, Alert, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -103,106 +103,144 @@ export default function ProfileScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
-            >
-                <Card style={styles.profileCard}>
-                    <View style={styles.header}>
-                        <View style={styles.avatarContainer}>
-                            <View style={styles.avatar}>
-                                <Ionicons name="person" size={40} color={Colors.primary} />
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <SafeAreaView style={styles.container}>
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+                >
+                    <Card style={styles.profileCard} glow>
+                        <View style={styles.header}>
+                            <View style={styles.avatarContainer}>
+                                <View style={styles.avatar}>
+                                    <Ionicons name="person" size={50} color={Colors.primary} />
+                                </View>
+                                <TouchableOpacity style={styles.settingsBtn} onPress={() => setProfileModalVisible(true)}>
+                                    <Ionicons name="camera" size={18} color="#fff" />
+                                </TouchableOpacity>
                             </View>
-                            <View style={styles.settingsBtn}>
-                                <Ionicons name="settings" size={20} color="#fff" />
+                            <Text style={styles.name}>{data?.user?.full_name || 'Sporcu'}</Text>
+
+                            <View style={styles.statsRow}>
+                                <View style={styles.stat}>
+                                    <Text style={styles.statVal}>{data?.user?.height_cm || '-'}</Text>
+                                    <Text style={styles.statLab}>Boy (cm)</Text>
+                                </View>
+                                <View style={styles.divider} />
+                                <View style={styles.stat}>
+                                    <Text style={styles.statVal}>{data?.user?.weight_kg || '-'}</Text>
+                                    <Text style={styles.statLab}>Kilo (kg)</Text>
+                                </View>
                             </View>
+
+                            <Text style={styles.totalVisits}>Toplam Ziyaret: {data?.user?.total_visits || 0}</Text>
                         </View>
-                        <Text style={styles.name}>{data?.user.full_name}</Text>
-                        <View style={styles.statsRow}>
-                            <View style={styles.stat}>
-                                <Text style={styles.statVal}>{data?.measurements && data?.measurements[0] ? `${data.measurements[0].weight_kg} kg` : '-- kg'}</Text>
-                                <Text style={styles.statLab}>Kilo</Text>
-                            </View>
-                            <View style={styles.divider} />
-                            <View style={styles.stat}>
-                                <Text style={styles.statVal}>{data?.user?.height_cm ? `${data.user.height_cm} cm` : '-- cm'}</Text>
-                                <Text style={styles.statLab}>Boy</Text>
-                            </View>
+                    </Card>
+
+                    <PrestigeBadges badges={data?.badges || []} />
+
+                    <View style={{ marginTop: 24 }}>
+                        <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>HESAP AYARLARI</Text>
+
+                        <TouchableOpacity style={styles.menuItem} onPress={() => setProfileModalVisible(true)}>
+                            <Ionicons name="person-outline" size={22} color={Colors.textSecondary} />
+                            <Text style={styles.menuText}>Profili Düzenle</Text>
+                            <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.menuItem} onPress={() => setPasswordModalVisible(true)}>
+                            <Ionicons name="lock-closed-outline" size={22} color={Colors.textSecondary} />
+                            <Text style={styles.menuText}>Şifre Değiştir</Text>
+                            <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
+                        </TouchableOpacity>
+
+                        <View style={styles.menuItem}>
+                            <Ionicons name="notifications-outline" size={22} color={Colors.textSecondary} />
+                            <Text style={styles.menuText}>Bildirimler</Text>
+                            <Switch
+                                value={notificationsEnabled}
+                                onValueChange={toggleNotifications}
+                                trackColor={{ false: '#333', true: Colors.primary }}
+                                thumbColor="#fff"
+                            />
                         </View>
-                        <Text style={styles.totalVisits}>Toplam Giriş: {data?.user?.total_checkins || 0}</Text>
+
+                        <TouchableOpacity style={[styles.menuItem, { borderBottomWidth: 0 }]} onPress={handleLogout}>
+                            <Ionicons name="log-out-outline" size={22} color={Colors.error} />
+                            <Text style={[styles.menuText, { color: Colors.error }]}>Çıkış Yap</Text>
+                        </TouchableOpacity>
                     </View>
-                </Card>
+                </ScrollView>
 
-                {data?.badges && data.badges.length > 0 && (
-                    <PrestigeBadges badges={data.badges} />
-                )}
-
-                <Card title="Hesap Ayarları">
-                    <TouchableOpacity style={styles.menuItem} onPress={() => { setEditHeight(data?.user?.height_cm?.toString() || ''); setEditWeight(data?.measurements?.[0]?.weight_kg?.toString() || ''); setProfileModalVisible(true); }}>
-                        <Ionicons name="person-outline" size={22} color={Colors.textSecondary} />
-                        <Text style={styles.menuText}>Profili Düzenle</Text>
-                        <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.menuItem} onPress={() => setPasswordModalVisible(true)}>
-                        <Ionicons name="lock-closed-outline" size={22} color={Colors.textSecondary} />
-                        <Text style={styles.menuText}>Şifre Değiştir</Text>
-                        <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-                    </TouchableOpacity>
-                    <View style={styles.menuItem}>
-                        <Ionicons name="notifications-outline" size={22} color={Colors.textSecondary} />
-                        <Text style={styles.menuText}>Bildirim Ayarları</Text>
-                        <Switch
-                            value={notificationsEnabled}
-                            onValueChange={toggleNotifications}
-                            trackColor={{ false: 'rgba(255,255,255,0.1)', true: Colors.primary }}
-                            thumbColor="#fff"
-                        />
-                    </View>
-                    <View style={styles.menuItem}>
-                        <Ionicons name="shield-outline" size={22} color={Colors.textSecondary} />
-                        <Text style={styles.menuText}>KVKK ve Gizlilik</Text>
-                        <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-                    </View>
-                </Card>
-
-                <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-                    <Text style={styles.logoutText}>Çıkış Yap</Text>
-                </TouchableOpacity>
-            </ScrollView>
-
-            <Modal visible={passwordModalVisible} animationType="slide" transparent>
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
+                {/* Password Modal */}
+                <Modal visible={passwordModalVisible} transparent animationType="fade">
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
                             <Text style={styles.modalTitle}>Şifre Değiştir</Text>
-                            <TouchableOpacity onPress={() => setPasswordModalVisible(false)}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+                            <TextInput
+                                style={styles.modalInput}
+                                placeholder="Mevcut Şifre"
+                                placeholderTextColor="#666"
+                                secureTextEntry
+                                value={currentPassword}
+                                onChangeText={setCurrentPassword}
+                            />
+                            <TextInput
+                                style={styles.modalInput}
+                                placeholder="Yeni Şifre"
+                                placeholderTextColor="#666"
+                                secureTextEntry
+                                value={newPassword}
+                                onChangeText={setNewPassword}
+                            />
+                            <View style={styles.modalButtons}>
+                                <TouchableOpacity style={styles.cancelBtn} onPress={() => setPasswordModalVisible(false)}>
+                                    <Text style={styles.cancelText}>İptal</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.saveBtn} onPress={handlePasswordChange}>
+                                    <Text style={styles.saveText}>Güncelle</Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
-                        <TextInput style={styles.input} placeholderTextColor={Colors.textMuted} secureTextEntry placeholder="Mevcut Şifre" value={currentPassword} onChangeText={setCurrentPassword} />
-                        <TextInput style={styles.input} placeholderTextColor={Colors.textMuted} secureTextEntry placeholder="Yeni Şifre" value={newPassword} onChangeText={setNewPassword} />
-                        <TouchableOpacity style={[styles.logoutBtn, { backgroundColor: Colors.primary }]} onPress={handlePasswordChange}>
-                            <Text style={[styles.logoutText, { color: '#fff' }]}>Güncelle</Text>
-                        </TouchableOpacity>
                     </View>
-                </View>
-            </Modal>
+                </Modal>
 
-            <Modal visible={profileModalVisible} animationType="slide" transparent>
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
+                {/* Profile Edit Modal */}
+                <Modal visible={profileModalVisible} transparent animationType="fade">
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
                             <Text style={styles.modalTitle}>Profili Düzenle</Text>
-                            <TouchableOpacity onPress={() => setProfileModalVisible(false)}><Ionicons name="close" size={24} color={Colors.text} /></TouchableOpacity>
+                            <Text style={styles.inputLabel}>Boy (cm)</Text>
+                            <TextInput
+                                style={styles.modalInput}
+                                keyboardType="numeric"
+                                value={editHeight}
+                                onChangeText={setEditHeight}
+                                placeholder={data?.user?.height_cm?.toString() || '180'}
+                                placeholderTextColor="#666"
+                            />
+                            <Text style={styles.inputLabel}>Kilo (kg)</Text>
+                            <TextInput
+                                style={styles.modalInput}
+                                keyboardType="numeric"
+                                value={editWeight}
+                                onChangeText={setEditWeight}
+                                placeholder={data?.user?.weight_kg?.toString() || '80'}
+                                placeholderTextColor="#666"
+                            />
+                            <View style={styles.modalButtons}>
+                                <TouchableOpacity style={styles.cancelBtn} onPress={() => setProfileModalVisible(false)}>
+                                    <Text style={styles.cancelText}>İptal</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.saveBtn} onPress={handleProfileUpdate}>
+                                    <Text style={styles.saveText}>Kaydet</Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
-                        <TextInput style={styles.input} placeholderTextColor={Colors.textMuted} placeholder="Boy (cm)" keyboardType="numeric" value={editHeight} onChangeText={setEditHeight} />
-                        <TextInput style={[styles.input, { marginTop: 12 }]} placeholderTextColor={Colors.textMuted} placeholder="Kilo (kg)" keyboardType="numeric" value={editWeight} onChangeText={setEditWeight} />
-                        <TouchableOpacity style={[styles.logoutBtn, { backgroundColor: Colors.primary }]} onPress={handleProfileUpdate}>
-                            <Text style={[styles.logoutText, { color: '#fff' }]}>Kaydet</Text>
-                        </TouchableOpacity>
                     </View>
-                </View>
-            </Modal>
-        </SafeAreaView>
+                </Modal>
+            </SafeAreaView>
+        </TouchableWithoutFeedback>
     );
 }
 
@@ -344,6 +382,61 @@ const styles = StyleSheet.create({
         color: Colors.text,
     },
     input: {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderRadius: 12,
+        padding: 16,
+        color: Colors.text,
+        fontSize: 16,
+        marginBottom: 12,
+    },
+    sectionTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: Colors.textSecondary,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        justifyContent: 'center',
+        padding: 20,
+    },
+    modalButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 12,
+    },
+    cancelBtn: {
+        flex: 1,
+        padding: 14,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        alignItems: 'center',
+    },
+    saveBtn: {
+        flex: 1,
+        padding: 14,
+        borderRadius: 12,
+        backgroundColor: Colors.primary,
+        alignItems: 'center',
+    },
+    cancelText: {
+        color: Colors.textMuted,
+        fontWeight: '700',
+    },
+    saveText: {
+        color: '#fff',
+        fontWeight: '700',
+    },
+    inputLabel: {
+        color: Colors.textMuted,
+        fontSize: 12,
+        fontWeight: '700',
+        marginBottom: 4,
+        marginTop: 12,
+    },
+    modalInput: {
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
         borderRadius: 12,
         padding: 16,

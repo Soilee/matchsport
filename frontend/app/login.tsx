@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, Alert, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,61 +24,63 @@ export default function LoginScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.content}>
-                <View style={styles.header}>
-                    <Ionicons name="flash" size={64} color={Colors.primary} />
-                    <Text style={styles.title}>MATCHLESS</Text>
-                    <Text style={styles.subtitle}>7/24 Kesintisiz Fitness Deneyimi</Text>
-                </View>
-
-                <View style={styles.form}>
-                    <View style={styles.inputContainer}>
-                        <Ionicons name="mail-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="E-posta Adresiniz"
-                            placeholderTextColor={Colors.textMuted}
-                            value={email}
-                            onChangeText={setEmail}
-                            autoCapitalize="none"
-                            keyboardType="email-address"
-                        />
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <SafeAreaView style={styles.container}>
+                <View style={styles.content}>
+                    <View style={styles.header}>
+                        <Ionicons name="flash" size={64} color={Colors.primary} />
+                        <Text style={styles.title}>MATCHLESS</Text>
+                        <Text style={styles.subtitle}>7/24 Kesintisiz Fitness Deneyimi</Text>
                     </View>
 
-                    <View style={styles.inputContainer}>
-                        <Ionicons name="lock-closed-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Şifreniz"
-                            placeholderTextColor={Colors.textMuted}
-                            value={password}
-                            onChangeText={setPassword}
-                            secureTextEntry
-                        />
+                    <View style={styles.form}>
+                        <View style={styles.inputContainer}>
+                            <Ionicons name="mail-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="E-posta Adresiniz"
+                                placeholderTextColor={Colors.textMuted}
+                                value={email}
+                                onChangeText={setEmail}
+                                autoCapitalize="none"
+                                keyboardType="email-address"
+                            />
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                            <Ionicons name="lock-closed-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Şifreniz"
+                                placeholderTextColor={Colors.textMuted}
+                                value={password}
+                                onChangeText={setPassword}
+                                secureTextEntry
+                            />
+                        </View>
+
+                        <TouchableOpacity
+                            style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                            onPress={handleLogin}
+                            disabled={loading}
+                        >
+                            <Text style={styles.loginButtonText}>
+                                {loading ? 'Giriş Yapılıyor...' : 'GİRİŞ YAP'}
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.registerButton}
+                            onPress={() => Alert.alert('Kayıt', 'Yeni üye kaydı sadece Admin veya Hocalar tarafından panel üzerinden yapılmaktadır. Lütfen salon bankosuyla iletişime geçin.')}
+                        >
+                            <Text style={styles.registerText}>
+                                Üye değil misin? <Text style={styles.registerTextBold}>Salon ile iletişime geç.</Text>
+                            </Text>
+                        </TouchableOpacity>
                     </View>
-
-                    <TouchableOpacity
-                        style={[styles.loginButton, loading && styles.loginButtonDisabled]}
-                        onPress={handleLogin}
-                        disabled={loading}
-                    >
-                        <Text style={styles.loginButtonText}>
-                            {loading ? 'Giriş Yapılıyor...' : 'GİRİŞ YAP'}
-                        </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={styles.registerButton}
-                        onPress={() => Alert.alert('Kayıt', 'Yeni üye kaydı sadece Admin veya Hocalar tarafından panel üzerinden yapılmaktadır. Lütfen salon bankosuyla iletişime geçin.')}
-                    >
-                        <Text style={styles.registerText}>
-                            Üye değil misin? <Text style={styles.registerTextBold}>Salon ile iletişime geç.</Text>
-                        </Text>
-                    </TouchableOpacity>
                 </View>
-            </View>
-        </SafeAreaView>
+            </SafeAreaView>
+        </TouchableWithoutFeedback>
     );
 }
 

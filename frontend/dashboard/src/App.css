@@ -40,6 +40,8 @@ body {
   position: sticky;
   top: 0;
   height: 100vh;
+  z-index: 1001;
+  transition: transform 0.3s ease;
 }
 
 .logo {
@@ -159,6 +161,7 @@ body {
 @media (max-width: 768px) {
   .stats-grid {
     grid-template-columns: 1fr;
+    gap: 1rem;
   }
 }
 
@@ -195,13 +198,15 @@ body {
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: 24px;
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  -webkit-overflow-scrolling: touch;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 600px;
 }
 
 th {
@@ -304,11 +309,18 @@ td {
   max-width: 500px;
   max-height: 90vh;
   border-radius: 28px;
-  padding: 2.2rem;
+  padding: 1.5rem;
   position: relative;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   animation: slideUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   overflow-y: auto;
+}
+
+@media (max-width: 480px) {
+  .modal-content {
+    padding: 1.2rem;
+    border-radius: 20px;
+  }
 }
 
 .modal-content::-webkit-scrollbar {
@@ -481,6 +493,8 @@ td {
   border-radius: 24px;
   padding: 2rem;
   margin-bottom: 2rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .heatmap-title {
@@ -737,4 +751,98 @@ td {
 
 .btn-danger:hover {
   background: rgba(255, 59, 48, 0.25);
+}
+
+
+/* MOBILE RESPONSIVENESS */
+.mobile-menu-toggle {
+  display: none;
+  position: fixed;
+  top: 1.5rem;
+  right: 1.5rem;
+  z-index: 1002;
+  background: var(--primary);
+  color: white;
+  border: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 4px 15px rgba(255, 59, 48, 0.3);
+  cursor: pointer;
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+}
+
+@media (max-width: 768px) {
+  .mobile-menu-toggle {
+    display: flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    left: 0;
+    transform: translateX(-100%);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    display: block;
+  }
+
+  .content {
+    padding: 1.5rem;
+    padding-top: 5rem;
+  }
+
+  .content-header {
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .header-left h1 {
+    font-size: 1.5rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .table-container {
+    border-radius: 16px;
+    overflow-x: auto;
+  }
+
+  table {
+    min-width: 600px;
+  }
+
+  .modal-content {
+    padding: 1.5rem;
+    width: 95%;
+  }
+
+  .heatmap-grid {
+    grid-template-columns: 40px repeat(16, 1fr);
+  }
+
+  .heatmap-label {
+    font-size: 0.5rem;
+  }
 }

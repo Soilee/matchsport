@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabase';
-import { Users, CreditCard, Activity, TrendingUp, Search, Bell, Settings, LogOut, Dumbbell, Layout, CheckSquare, UserPlus, ShieldCheck, Key, Trash2, Edit, DollarSign } from 'lucide-react';
+import { Users, CreditCard, Activity, TrendingUp, Search, Bell, Settings, LogOut, Dumbbell, Layout, CheckSquare, UserPlus, ShieldCheck, Key, Trash2, Edit, DollarSign, Menu, X } from 'lucide-react';
 import './App.css';
 
 const API_URL = 'https://matchsport.onrender.com/api';
@@ -85,6 +85,7 @@ const App = () => {
   const [liveCount, setLiveCount] = useState(0);
   const [financeData, setFinanceData] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const token = localStorage.getItem('token');
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
@@ -294,8 +295,11 @@ const App = () => {
   const roleLabel = isSuperAdmin ? 'SuperAdmin' : currentUser?.role === 'admin' ? 'Admin' : 'Eğitmen';
 
   return (
-    <div className="app-container">
-      <aside className="sidebar">
+    <div className={`app-container ${isSidebarOpen ? 'sidebar-open' : ''}`}>
+      <button className="mobile-menu-toggle" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
+        {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
+      </button>
+      <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
         <div className="logo"><Dumbbell color="#FF3B30" size={28} /><span>MATCHLESS</span></div>
         <nav className="nav-links">
           <button className={`nav-item ${activeView === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveView('dashboard')}><Layout size={20} /> Panel</button>
@@ -312,6 +316,8 @@ const App = () => {
           <button className="nav-item" style={{ color: '#FF3B30' }} onClick={() => { localStorage.removeItem('token'); window.location.reload(); }}><LogOut size={20} /> Çıkış Yap</button>
         </div>
       </aside>
+
+      {isSidebarOpen && <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)}></div>}
 
       <main className="content">
         <header className="content-header">

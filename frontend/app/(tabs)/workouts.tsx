@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, ScrollView, RefreshControl, ActivityIndicator, TouchableOpacity, Alert, TextInput } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, RefreshControl, ActivityIndicator, TouchableOpacity, Alert, TextInput, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -24,6 +24,7 @@ export default function WorkoutsScreen() {
     const [nutritionLogs, setNutritionLogs] = useState<any[]>([]);
     const [foods, setFoods] = useState<any[]>([]);
     const [isLogging, setIsLogging] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
 
     // AI & Manual Diet State
     const [aiInput, setAiInput] = useState('');
@@ -214,7 +215,7 @@ export default function WorkoutsScreen() {
                 {/* 3. Official Exercise List */}
                 {selectedDay && (
                     <View style={styles.exercisesList}>
-                        <Text style={styles.sectionTitle}>{selectedDay.muscle_group} Antrenmanı</Text>
+                        <Text style={styles.sectionTitle}>Antrenman</Text>
                         {selectedDay.exercises.map((ex: Exercise, idx: number) => (
                             <Card key={ex.id} style={styles.exerciseCard}>
                                 <View style={styles.exerciseHeader}>
@@ -483,188 +484,177 @@ export default function WorkoutsScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
-            <View style={styles.tabs}>
-                <TouchableOpacity
-                    style={[styles.tab, activeTab === 'workout' && styles.activeTab]}
-                    onPress={() => setActiveTab('workout')}
-                >
-                    <Ionicons name="barbell" size={20} color={activeTab === 'workout' ? Colors.primary : Colors.textMuted} />
-                    <Text style={[styles.tabText, activeTab === 'workout' && styles.activeTabText]}>Antrenman</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={[styles.tab, activeTab === 'diet' && styles.activeTab]}
-                    onPress={() => setActiveTab('diet')}
-                >
-                    <Ionicons name="restaurant" size={20} color={activeTab === 'diet' ? Colors.primary : Colors.textMuted} />
-                    <Text style={[styles.tabText, activeTab === 'diet' && styles.activeTabText]}>Diyet Planı</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={[styles.tab, activeTab === 'nutrition' && styles.activeTab]}
-                    onPress={() => setActiveTab('nutrition')}
-                >
-                    <Ionicons name="calculator" size={20} color={activeTab === 'nutrition' ? Colors.primary : Colors.textMuted} />
-                    <Text style={[styles.tabText, activeTab === 'nutrition' && styles.activeTabText]}>Beslenme</Text>
-                </TouchableOpacity>
-            </View>
-
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
-            >
-                {activeTab === 'workout' ? renderWorkoutContent() :
-                    activeTab === 'diet' ? renderDietContent() : renderNutritionContent()}
-            </ScrollView>
-
-            {/* Manual Diet Entry Modal */}
-            {isManualDietMode && (
-                <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, { maxHeight: '80%' }]}>
-                        <ScrollView showsVerticalScrollIndicator={false}>
-                            <Text style={styles.modalTitle}>Manuel Diyet Girişi</Text>
-
-                            <View style={styles.formGroup}>
-                                <Text style={styles.label}>Hedef / Plan Adı</Text>
-                                <TextInput
-                                    style={styles.aiInputModal}
-                                    placeholder="Örn: 1. Ay Hacim Planı"
-                                    value={manualDietData.goal}
-                                    onChangeText={t => setManualDietData({ ...manualDietData, goal: t })}
-                                />
-                            </View>
-
-                            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.label}>Kalori</Text>
-                                    <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.daily_calories} onChangeText={t => setManualDietData({ ...manualDietData, daily_calories: t })} />
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.label}>P (g)</Text>
-                                    <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.protein_g} onChangeText={t => setManualDietData({ ...manualDietData, protein_g: t })} />
-                                </View>
-                            </View>
-
-                            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.label}>K (g)</Text>
-                                    <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.carbs_g} onChangeText={t => setManualDietData({ ...manualDietData, carbs_g: t })} />
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.label}>Y (g)</Text>
-                                    <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.fat_g} onChangeText={t => setManualDietData({ ...manualDietData, fat_g: t })} />
-                                </View>
-                            </View>
-
-                            <Text style={[styles.label, { marginBottom: 10 }]}>Öğünler</Text>
-                            {manualDietData.meals.map((meal, idx) => (
-                                <View key={idx} style={{ marginBottom: 20, padding: 10, borderLeftWidth: 2, borderLeftColor: Colors.primary }}>
-                                    <TextInput
-                                        style={[styles.aiInputModal, { minHeight: 40, marginBottom: 5 }]}
-                                        placeholder="Öğün Adı (Örn: Kahvaltı)"
-                                        value={meal.name}
-                                        onChangeText={t => {
-                                            const newMeals = [...manualDietData.meals];
-                                            newMeals[idx].name = t;
-                                            setManualDietData({ ...manualDietData, meals: newMeals });
-                                        }}
-                                    />
-                                    <TextInput
-                                        style={[styles.aiInputModal, { minHeight: 60 }]}
-                                        placeholder="Yiyecekler (Virgül ile ayırın)"
-                                        multiline
-                                        onChangeText={t => {
-                                            const newMeals = [...manualDietData.meals];
-                                            newMeals[idx].items = t.split(',').map(s => s.trim());
-                                            setManualDietData({ ...manualDietData, meals: newMeals });
-                                        }}
-                                    />
-                                </View>
-                            ))}
-
-                            <TouchableOpacity
-                                style={{ alignItems: 'center', marginBottom: 20 }}
-                                onPress={() => setManualDietData({
-                                    ...manualDietData,
-                                    meals: [...manualDietData.meals, { name: `${manualDietData.meals.length + 1}. Öğün`, time: '00:00', items: [''] }]
-                                })}
-                            >
-                                <Text style={{ color: Colors.primary }}>+ Öğün Ekle</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity style={styles.aiLogBtn} onPress={handleManualDietSubmit}>
-                                {aiLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.aiLogBtnText}>Planı Kaydet</Text>}
-                            </TouchableOpacity>
-
-                            <TouchableOpacity style={styles.closeBtn} onPress={() => setIsManualDietMode(false)}>
-                                <Text style={styles.closeBtnText}>Vazgeç</Text>
-                            </TouchableOpacity>
-                        </ScrollView>
-                    </View>
-                </View>
-            )}
-
-            {/* AI Nutrition Logging Modal */}
-            {isLogging && (
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>AI Diyet Asistanı 🤖</Text>
-                        <Text style={styles.modalSubtitle}>Sadece ne yediğinizi yazın, makroları biz hesaplayalım.</Text>
-
-                        <TextInput
-                            style={styles.aiInputModal}
-                            placeholder="Örn: 2 dilim tam buğday ekmeği ve 2 yumurta yedim"
-                            placeholderTextColor={Colors.textMuted}
-                            value={aiInput}
-                            onChangeText={setAiInput}
-                            multiline
-                            autoFocus
-                        />
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <SafeAreaView style={styles.container}>
+                <View style={styles.header}>
+                    <Text style={styles.title}>Antrenman & Beslenme</Text>
+                    <View style={styles.tabContainer}>
+                        <TouchableOpacity
+                            style={[styles.tab, activeTab === 'workout' && styles.activeTab]}
+                            onPress={() => setActiveTab('workout')}
+                        >
+                            <Ionicons name="barbell" size={20} color={activeTab === 'workout' ? Colors.primary : Colors.textMuted} />
+                            <Text style={[styles.tabText, activeTab === 'workout' && styles.activeTabText]}>Programım</Text>
+                        </TouchableOpacity>
 
                         <TouchableOpacity
-                            style={styles.aiLogBtn}
-                            onPress={handleAiMealLog}
-                            disabled={aiLoading}
+                            style={[styles.tab, activeTab === 'diet' && styles.activeTab]}
+                            onPress={() => setActiveTab('diet')}
                         >
-                            {aiLoading ? <ActivityIndicator color="#fff" /> : (
-                                <>
-                                    <Ionicons name="add" size={20} color="#fff" />
-                                    <Text style={styles.aiLogBtnText}>Hemen Ekle</Text>
-                                </>
-                            )}
+                            <Ionicons name="restaurant" size={20} color={activeTab === 'diet' ? Colors.primary : Colors.textMuted} />
+                            <Text style={[styles.tabText, activeTab === 'diet' && styles.activeTabText]}>Diyet Planı</Text>
                         </TouchableOpacity>
 
-                        <Text style={styles.orText}>VEYA LİSTEDEN SEÇİN</Text>
-
-                        <ScrollView style={{ maxHeight: 200 }}>
-                            {foods.map(food => (
-                                <TouchableOpacity
-                                    key={food.id}
-                                    style={styles.foodItem}
-                                    onPress={async () => {
-                                        try {
-                                            const qty = 100;
-                                            const { addNutritionLog } = await import('@/services/api');
-                                            await addNutritionLog({ food_item_id: food.id, quantity_g: qty });
-                                            setIsLogging(false);
-                                            loadData();
-                                        } catch (e) { console.error(e); }
-                                    }}
-                                >
-                                    <Text style={styles.foodName}>{food.name}</Text>
-                                    <Text style={styles.foodMacros}>100g: {food.calories_100g} kcal</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-
-                        <TouchableOpacity style={styles.closeBtn} onPress={() => setIsLogging(false)}>
-                            <Text style={styles.closeBtnText}>İptal</Text>
+                        <TouchableOpacity
+                            style={[styles.tab, activeTab === 'nutrition' && styles.activeTab]}
+                            onPress={() => setActiveTab('nutrition')}
+                        >
+                            <Ionicons name="calculator" size={20} color={activeTab === 'nutrition' ? Colors.primary : Colors.textMuted} />
+                            <Text style={[styles.tabText, activeTab === 'nutrition' && styles.activeTabText]}>Beslenme</Text>
                         </TouchableOpacity>
                     </View>
+
+                    <ScrollView
+                        contentContainerStyle={styles.scrollContent}
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+                    >
+                        {activeTab === 'workout' ? renderWorkoutContent() :
+                            activeTab === 'diet' ? renderDietContent() : renderNutritionContent()}
+                    </ScrollView>
+
+                    {/* Manual Diet Entry Modal */}
+                    {isManualDietMode && (
+                        <View style={styles.modalOverlay}>
+                            <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+                                <ScrollView showsVerticalScrollIndicator={false}>
+                                    <Text style={styles.modalTitle}>Manuel Diyet Girişi</Text>
+
+                                    <View style={styles.formGroup}>
+                                        <Text style={styles.label}>Hedef / Plan Adı</Text>
+                                        <TextInput
+                                            style={styles.aiInputModal}
+                                            placeholder="Örn: 1. Ay Hacim Planı"
+                                            value={manualDietData.goal}
+                                            onChangeText={t => setManualDietData({ ...manualDietData, goal: t })}
+                                        />
+                                    </View>
+
+                                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.label}>Kalori</Text>
+                                            <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.daily_calories} onChangeText={t => setManualDietData({ ...manualDietData, daily_calories: t })} />
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.label}>P (g)</Text>
+                                            <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.protein_g} onChangeText={t => setManualDietData({ ...manualDietData, protein_g: t })} />
+                                        </View>
+                                    </View>
+
+                                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.label}>K (g)</Text>
+                                            <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.carbs_g} onChangeText={t => setManualDietData({ ...manualDietData, carbs_g: t })} />
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.label}>Y (g)</Text>
+                                            <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.fat_g} onChangeText={t => setManualDietData({ ...manualDietData, fat_g: t })} />
+                                        </View>
+                                    </View>
+
+                                    <Text style={[styles.label, { marginBottom: 10 }]}>Öğünler</Text>
+                                    {manualDietData.meals.map((meal, idx) => (
+                                        <View key={idx} style={{ marginBottom: 20, padding: 10, borderLeftWidth: 2, borderLeftColor: Colors.primary }}>
+                                            <TextInput
+                                                style={[styles.aiInputModal, { minHeight: 40, marginBottom: 5 }]}
+                                                placeholder="Öğün Adı (Örn: Kahvaltı)"
+                                                value={meal.name}
+                                                onChangeText={t => {
+                                                    const newMeals = [...manualDietData.meals];
+                                                    newMeals[idx].name = t;
+                                                    setManualDietData({ ...manualDietData, meals: newMeals });
+                                                }}
+                                            />
+                                            <TextInput
+                                                style={[styles.aiInputModal, { minHeight: 60 }]}
+                                                placeholder="Yiyecekler (Virgül ile ayırın)"
+                                                multiline
+                                                onChangeText={t => {
+                                                    const newMeals = [...manualDietData.meals];
+                                                    newMeals[idx].items = t.split(',').map(s => s.trim());
+                                                    setManualDietData({ ...manualDietData, meals: newMeals });
+                                                }}
+                                            />
+                                        </View>
+                                    ))}
+
+                                    <TouchableOpacity
+                                        style={{ alignItems: 'center', marginBottom: 20 }}
+                                        onPress={() => setManualDietData({
+                                            ...manualDietData,
+                                            meals: [...manualDietData.meals, { name: `${manualDietData.meals.length + 1}. Öğün`, time: '00:00', items: [''] }]
+                                        })}
+                                    >
+                                        <Text style={{ color: Colors.primary }}>+ Öğün Ekle</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity style={styles.aiLogBtn} onPress={handleManualDietSubmit}>
+                                        {aiLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.aiLogBtnText}>Planı Kaydet</Text>}
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity style={styles.closeBtn} onPress={() => setIsManualDietMode(false)}>
+                                        <Text style={styles.closeBtnText}>Vazgeç</Text>
+                                    </TouchableOpacity>
+                                </ScrollView>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Logging Modal */}
+                    {isLogging && (
+                        <View style={styles.modalOverlay}>
+                            <View style={styles.modalContent}>
+                                <Text style={styles.modalTitle}>Besin Ara</Text>
+                                <TextInput
+                                    style={styles.modalInput}
+                                    placeholder="Besin ismi girin..."
+                                    placeholderTextColor="#666"
+                                    value={searchQuery}
+                                    onChangeText={setSearchQuery}
+                                />
+
+                                <ScrollView style={{ maxHeight: 300, marginTop: 15 }}>
+                                    {foods.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())).map(food => (
+                                        <TouchableOpacity
+                                            key={food.id}
+                                            style={styles.foodItem}
+                                            onPress={async () => {
+                                                try {
+                                                    const { addNutritionLog } = await import('@/services/api');
+                                                    await addNutritionLog({
+                                                        food_item_id: food.id,
+                                                        quantity_g: 100,
+                                                        meal_type: 'Atıştırmalık'
+                                                    });
+                                                    setIsLogging(false);
+                                                    loadData();
+                                                } catch (e) { console.error(e); }
+                                            }}
+                                        >
+                                            <Text style={styles.foodName}>{food.name}</Text>
+                                            <Text style={styles.foodMacros}>100g: {food.calories_100g} kcal</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+
+                                <TouchableOpacity style={styles.closeBtn} onPress={() => setIsLogging(false)}>
+                                    <Text style={styles.closeBtnText}>İptal</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
                 </View>
-            )}
-        </SafeAreaView>
+            </SafeAreaView>
+        </TouchableWithoutFeedback>
     );
 }
 
@@ -1250,5 +1240,28 @@ const styles = StyleSheet.create({
     },
     formGroup: {
         marginBottom: 16,
-    }
+    },
+    header: {
+        padding: 24,
+        paddingTop: 40,
+        backgroundColor: Colors.surface,
+    },
+    title: {
+        fontSize: 24,
+        fontWeight: '900',
+        color: Colors.text,
+        marginBottom: 20,
+    },
+    tabContainer: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    modalInput: {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderRadius: 12,
+        padding: 16,
+        color: Colors.text,
+        fontSize: 16,
+        marginBottom: 12,
+    },
 });

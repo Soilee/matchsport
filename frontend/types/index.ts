@@ -7,9 +7,12 @@ export interface User {
     profile_photo_url: string | null;
     birth_date: string;
     height_cm?: number;
+    weight_kg?: number;
     current_streak?: number;
     best_streak?: number;
     total_checkins?: number;
+    total_visits?: number;
+    prestige_points?: number;
     notification_enabled?: boolean;
 }
 
