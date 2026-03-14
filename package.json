@@ -1,0 +1,17 @@
+{
+    "name": "matchsport-root",
+    "version": "1.0.0",
+    "description": "MatchSport Gym App Root",
+    "private": true,
+    "scripts": {
+        "frontend": "npm start --prefix frontend",
+        "web": "npm run web --prefix frontend",
+        "backend": "npm start --prefix backend",
+        "dashboard": "npm run dev --prefix frontend/dashboard",
+        "dev": "npx concurrently \"npm run dev --prefix backend\" \"npm run web\" \"npm run dashboard\"",
+        "install-all": "npm install --prefix frontend && npm install --prefix backend && npm install --prefix frontend/dashboard"
+    },
+    "devDependencies": {
+        "concurrently": "^8.2.2"
+    }
+}
