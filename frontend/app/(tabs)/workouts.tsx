@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, ScrollView, RefreshControl, ActivityIndicator, TouchableOpacity, Alert, TextInput, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, RefreshControl, ActivityIndicator, TouchableOpacity, Alert, TextInput, TouchableWithoutFeedback, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -524,7 +524,10 @@ export default function WorkoutsScreen() {
 
                     {/* Manual Diet Entry Modal */}
                     {isManualDietMode && (
-                        <View style={styles.modalOverlay}>
+                        <KeyboardAvoidingView
+                            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                            style={styles.modalOverlay}
+                        >
                             <View style={[styles.modalContent, { maxHeight: '80%' }]}>
                                 <ScrollView showsVerticalScrollIndicator={false}>
                                     <Text style={styles.modalTitle}>Manuel Diyet Girişi</Text>
@@ -597,16 +600,23 @@ export default function WorkoutsScreen() {
                                         <Text style={{ color: Colors.primary }}>+ Öğün Ekle</Text>
                                     </TouchableOpacity>
 
-                                    <TouchableOpacity style={styles.aiLogBtn} onPress={handleManualDietSubmit}>
-                                        {aiLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.aiLogBtnText}>Planı Kaydet</Text>}
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity style={styles.closeBtn} onPress={() => setIsManualDietMode(false)}>
-                                        <Text style={styles.closeBtnText}>Vazgeç</Text>
-                                    </TouchableOpacity>
+                                    <View style={styles.modalFooter}>
+                                        <TouchableOpacity
+                                            style={styles.btnSecondary}
+                                            onPress={() => {
+                                                setManualDietData({ goal: '', daily_calories: '', protein_g: '', carbs_g: '', fat_g: '', meals: [{ name: '1. Öğün', time: '08:00', items: [''] }] });
+                                                setIsManualDietMode(false);
+                                            }}
+                                        >
+                                            <Text style={styles.btnSecondaryText}>Vazgeç</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity style={styles.aiLogBtn} onPress={handleManualDietSubmit}>
+                                            {aiLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.aiLogBtnText}>Kaydet</Text>}
+                                        </TouchableOpacity>
+                                    </View>
                                 </ScrollView>
                             </View>
-                        </View>
+                        </KeyboardAvoidingView>
                     )}
 
                     {/* Logging Modal */}
@@ -1134,6 +1144,24 @@ const styles = StyleSheet.create({
     },
     closeBtnText: {
         color: Colors.text,
+        fontWeight: '700',
+    },
+    modalFooter: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 10,
+    },
+    btnSecondary: {
+        flex: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        padding: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    btnSecondaryText: {
+        color: Colors.text,
+        fontSize: 16,
         fontWeight: '700',
     },
     // AI & DIET ENHANCEMENTS

@@ -217,7 +217,9 @@ const App = () => {
             payment_method: formData.payment_method || 'cash',
             package_type: formData.package_type || '1_month',
             notes: formData.notes || '',
-            total_price: formData.total_price ? parseFloat(formData.total_price) : parseFloat(formData.amount)
+            total_price: formData.total_price ? parseFloat(formData.total_price) : parseFloat(formData.amount),
+            payment_type: formData.payment_type || 'cash_full',
+            installment_count: parseInt(formData.installment_count || '1')
           })
         });
         const d = await res.json(); if (d.error) throw new Error(d.error);
@@ -488,8 +490,12 @@ const App = () => {
                 </div>
               )}
               {modal.type === 'payment' && (<>
-                <div className="form-group"><label>Paket Toplam Fiyatı (₺)</label><input type="number" step="0.01" placeholder="Örn: 12000" onChange={e => setFormData({ ...formData, total_price: e.target.value })} /></div>
-                <div className="form-group"><label>Bu Ay Ödenen Tutar (₺)</label><input type="number" step="0.01" placeholder="Örn: 4000" required onChange={e => setFormData({ ...formData, amount: e.target.value })} /></div>
+                <div className="form-group"><label>Paket Toplam Fiyatı (₺)</label><input type="number" step="0.1" placeholder="Örn: 12000" onChange={e => setFormData({ ...formData, total_price: e.target.value })} /></div>
+                <div className="form-group"><label>Bu Ay Ödenen Tutar (₺)</label><input type="number" step="0.1" placeholder="Örn: 4000" required onChange={e => setFormData({ ...formData, amount: e.target.value })} /></div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="form-group"><label>Ödeme Türü</label><select onChange={e => setFormData({ ...formData, payment_type: e.target.value })} defaultValue="cash_full"><option value="cash_full">Peşin</option><option value="installment">Taksitli</option></select></div>
+                  <div className="form-group"><label>Taksit Sayısı</label><input type="number" placeholder="1" onChange={e => setFormData({ ...formData, installment_count: e.target.value })} /></div>
+                </div>
                 <div className="form-group"><label>Paket Süresi</label><select onChange={e => setFormData({ ...formData, package_type: e.target.value })} defaultValue="1_month"><option value="1_month">1 Ay</option><option value="3_months">3 Ay</option><option value="6_months">6 Ay</option><option value="12_months">12 Ay</option></select></div>
                 <div className="form-group"><label>Ödeme Yöntemi</label><select onChange={e => setFormData({ ...formData, payment_method: e.target.value })} defaultValue="cash"><option value="cash">Nakit</option><option value="card">Kart</option><option value="bank_transfer">Havale/EFT</option></select></div>
                 <div className="form-group"><label>Not</label><input type="text" placeholder="Opsiyonel" onChange={e => setFormData({ ...formData, notes: e.target.value })} /></div>
