@@ -81,6 +81,9 @@ const App = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const [modal, setModal] = useState({ show: false, type: '', data: null });
   const [formData, setFormData] = useState({});
+  const [filterType, setFilterType] = useState('all'); // all, exp1, exp7, exp14, debt
+  const [sortConfig, setSortConfig] = useState({ key: 'remaining_days', direction: 'asc' });
+  const [searchQuery, setSearchQuery] = useState('');
   const [heatmapData, setHeatmapData] = useState([]);
   const [liveCount, setLiveCount] = useState(0);
   const [financeData, setFinanceData] = useState(null);
@@ -397,9 +400,9 @@ const App = () => {
           </div>
           <div className="stats-subtitle" style={{ marginTop: '2rem' }}>Üyeliği Bitmek Üzere Olanlar</div>
           <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginTop: '1rem' }}>
-            <StatCard label="1 Gün Kalanlar" value={stats.expiringIn1Day} sub="Bugün/Yarın Bitiş" variant="danger" />
-            <StatCard label="7 Gün Kalanlar" value={stats.expiringIn7Days} sub="1 Hafta İçinde" variant="warning" />
-            <StatCard label="14 Gün Kalanlar" value={stats.expiringIn14Days} sub="2 Hafta İçinde" variant="info" />
+            <StatCard label="1 Gün Kalanlar" value={stats.expiringIn1Day} sub="Bugün/Yarın Bitiş" variant="danger" onClick={() => { setActiveView('members'); setFilterType('exp1'); }} />
+            <StatCard label="7 Gün Kalanlar" value={stats.expiringIn7Days} sub="1 Hafta İçinde" variant="warning" onClick={() => { setActiveView('members'); setFilterType('exp7'); }} />
+            <StatCard label="14 Gün Kalanlar" value={stats.expiringIn14Days} sub="2 Hafta İçinde" variant="info" onClick={() => { setActiveView('members'); setFilterType('exp14'); }} />
           </div>
           <HeatmapComponent data={heatmapData} />
         </>)}
@@ -468,35 +471,85 @@ const App = () => {
         {activeView === 'members' && (
           <div className="table-container enterprise-table">
             <div className="section-header">
-              <h3>Tüm Üyeler ({members.length})</h3>
-              <button className="btn-primary" onClick={() => openModal('add-member')}>+ Yeni Üye Ekle</button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <h3>Tüm Üyeler ({members.length})</h3>
+                <div className="filter-bar" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <button className={`btn-filter ${filterType === 'all' ? 'active' : ''}`} onClick={() => setFilterType('all')}>Tümü</button>
+                  <button className={`btn-filter ${filterType === 'exp1' ? 'active' : ''}`} onClick={() => setFilterType('exp1')}>1 Gün Kalan</button>
+                  <button className={`btn-filter ${filterType === 'exp7' ? 'active' : ''}`} onClick={() => setFilterType('exp7')}>7 Gün</button>
+                  <button className={`btn-filter ${filterType === 'exp14' ? 'active' : ''}`} onClick={() => setFilterType('exp14')}>14 Gün</button>
+                  <button className={`btn-filter ${filterType === 'debt' ? 'active' : ''}`} style={{ borderColor: '#FF3B30', color: filterType === 'debt' ? 'white' : '#FF3B30', background: filterType === 'debt' ? '#FF3B30' : 'transparent' }} onClick={() => setFilterType('debt')}>Borcu Olanlar</button>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <div className="search-box">
+                  <Search size={18} />
+                  <input type="text" placeholder="Üye ara..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                </div>
+                <button className="btn-primary" onClick={() => openModal('add-member')}>+ Yeni Üye Ekle</button>
+              </div>
             </div>
-            <table><thead><tr><th>Ad Soyad</th><th>Paket</th><th>Kalan Süre</th><th>Durum</th><th>İşlemler</th></tr></thead>
-              <tbody>{members.map(m => (
-                <tr key={m.id}>
-                  <td><div style={{ fontWeight: 700 }}>{m.full_name}</div><div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{m.email}</div></td>
-                  <td><div style={{ fontWeight: 600 }}>{m.memberships?.[0]?.package_type || 'Standart'}</div></td>
-                  <td>{m.memberships?.[0]?.remaining_days || 0} <span style={{ color: 'var(--text-dim)', fontSize: '0.7rem' }}>gün</span></td>
-                  <td><span className={`badge badge-${m.memberships?.[0]?.status || 'expired'}`}>{m.memberships?.[0]?.status === 'active' ? 'AKTİF' : m.memberships?.[0]?.status === 'frozen' ? 'DONDURULDU' : 'BİTTİ'}</span></td>
-                  <td><div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-                    <button className="btn-action" style={{ color: '#FF9F0A' }} onClick={() => handleStatusToggle(m.id, m.memberships?.[0]?.status)}>{m.memberships?.[0]?.status === 'frozen' ? 'Aktif' : 'Dondur'}</button>
-                    <button className="btn-action" style={{ color: '#34C759' }} onClick={() => openModal('payment', m)}>💰 Ödeme</button>
-                    <button className="btn-action" style={{ color: '#007AFF' }} onClick={() => openModal('installments', m)}>📊 Taksitler</button>
-                    <button className="btn-action" onClick={() => openModal('add-days', m)}>📅 Gün Ekle</button>
-                    <button className="btn-action" style={{ color: '#FF3B30' }} onClick={() => { setModal({ show: true, type: 'add-days', data: m }); setFormData({ actionType: 'subtract' }); }}>➖ Çıkar</button>
-                    <button className="btn-action" onClick={() => openModal('nutrition-view', m)}>🍎 Beslenme</button>
-                    <button className="btn-action" onClick={() => openModal('workout-view', m)}>🏋️ Antrenman</button>
-                    <button className="btn-action" onClick={() => {
-                      const dietBtn = document.querySelector(`[data-user-id="${m.id}"] .diet-btn`);
-                      // This is a bit complex due to nested data, but I'll add a direct way
-                      openModal('diet', m);
-                    }}>🥗 Diyet</button>
-                    <button className="btn-action" onClick={() => openModal('measurement', m)}>📐 Ölçüm</button>
-                    <button className="btn-action" onClick={() => openModal('reset-password', m)}><Key size={14} /></button>
-                    {isAdmin && <button className="btn-danger" onClick={() => handleDeleteUser(m)}><Trash2 size={14} /></button>}
-                  </div></td>
+            <table>
+              <thead>
+                <tr>
+                  <th>Ad Soyad</th>
+                  <th>Paket</th>
+                  <th onClick={() => setSortConfig({ key: 'remaining_days', direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' })} style={{ cursor: 'pointer' }}>
+                    Kalan Süre {sortConfig.key === 'remaining_days' && (sortConfig.direction === 'asc' ? '🔼' : '🔽')}
+                  </th>
+                  <th>Durum</th>
+                  <th>İşlemler</th>
                 </tr>
-              ))}</tbody>
+              </thead>
+              <tbody>
+                {members
+                  .filter(m => {
+                    const searchLower = searchQuery.toLowerCase();
+                    const matchesSearch = m.full_name?.toLowerCase().includes(searchLower) || m.email?.toLowerCase().includes(searchLower);
+                    if (!matchesSearch) return false;
+
+                    const membership = m.memberships?.[0];
+                    if (filterType === 'debt') {
+                      const debt = (membership?.total_price || 0) - (membership?.amount || 0);
+                      return debt > 0;
+                    }
+                    if (filterType === 'exp1') return membership?.remaining_days <= 1;
+                    if (filterType === 'exp7') return membership?.remaining_days <= 7;
+                    if (filterType === 'exp14') return membership?.remaining_days <= 14;
+                    return true;
+                  })
+                  .sort((a, b) => {
+                    const valA = a.memberships?.[0]?.[sortConfig.key] || 0;
+                    const valB = b.memberships?.[0]?.[sortConfig.key] || 0;
+                    if (sortConfig.direction === 'asc') return valA - valB;
+                    return valB - valA;
+                  })
+                  .map(m => (
+                    <tr key={m.id}>
+                      <td><div style={{ fontWeight: 700 }}>{m.full_name}</div><div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{m.email}</div></td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{m.memberships?.[0]?.package_type || 'Standart'}</div>
+                        {(m.memberships?.[0]?.total_price - m.memberships?.[0]?.amount > 0) &&
+                          <div style={{ fontSize: '0.7rem', color: '#FF3B30', fontWeight: 'bold' }}>Borç: ₺{m.memberships[0].total_price - m.memberships[0].amount}</div>
+                        }
+                      </td>
+                      <td>{m.memberships?.[0]?.remaining_days || 0} <span style={{ color: 'var(--text-dim)', fontSize: '0.7rem' }}>gün</span></td>
+                      <td><span className={`badge badge-${m.memberships?.[0]?.status || 'expired'}`}>{m.memberships?.[0]?.status === 'active' ? 'AKTİF' : m.memberships?.[0]?.status === 'frozen' ? 'DONDURULDU' : 'BİTTİ'}</span></td>
+                      <td><div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                        <button className="btn-action" style={{ color: '#FF9F0A' }} onClick={() => handleStatusToggle(m.id, m.memberships?.[0]?.status)}>{m.memberships?.[0]?.status === 'frozen' ? 'Aktif' : 'Dondur'}</button>
+                        <button className="btn-action" style={{ color: '#34C759' }} onClick={() => openModal('payment', m)}>💰 Ödeme</button>
+                        <button className="btn-action" style={{ color: '#007AFF' }} onClick={() => openModal('installments', m)}>📊 Taksitler</button>
+                        <button className="btn-action" onClick={() => openModal('add-days', m)}>📅 Gün Ekle</button>
+                        <button className="btn-action" style={{ color: '#FF3B30' }} onClick={() => { setModal({ show: true, type: 'add-days', data: m }); setFormData({ actionType: 'subtract' }); }}>➖ Çıkar</button>
+                        <button className="btn-action" onClick={() => openModal('nutrition-view', m)}>🍎 Beslenme</button>
+                        <button className="btn-action" onClick={() => openModal('workout-view', m)}>🏋️ Antrenman</button>
+                        <button className="btn-action" onClick={() => openModal('diet', m)}>🥗 Diyet</button>
+                        <button className="btn-action" onClick={() => openModal('measurement', m)}>📐 Ölçüm</button>
+                        <button className="btn-action" onClick={() => openModal('reset-password', m)}><Key size={14} /></button>
+                        {isAdmin && <button className="btn-danger" onClick={() => handleDeleteUser(m)}><Trash2 size={14} /></button>}
+                      </div></td>
+                    </tr>
+                  ))}</tbody>
             </table>
           </div>
         )}
@@ -848,8 +901,12 @@ const MemberInstallmentView = ({ userId }) => {
   );
 };
 
-const StatCard = ({ icon, label, value, sub, variant }) => (
-  <div className={`stat-card ${variant ? `stat-${variant}` : ''}`}>
+const StatCard = ({ icon, label, value, sub, variant, onClick }) => (
+  <div
+    className={`stat-card ${variant ? `stat-${variant}` : ''}`}
+    onClick={onClick}
+    style={{ cursor: onClick ? 'pointer' : 'default' }}
+  >
     <div className="stat-icon-wrapper">{icon}</div>
     <div className="stat-label">{label}</div>
     <div className="stat-value">{value}</div>

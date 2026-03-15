@@ -82,6 +82,12 @@ export default function TabLayout() {
           href: null, // Hidden from tab bar to simplify
         }}
       />
+      <Tabs.Screen
+        name="announcements"
+        options={{
+          href: null, // Hidden from tab bar as per user request
+        }}
+      />
     </Tabs>
   );
 }

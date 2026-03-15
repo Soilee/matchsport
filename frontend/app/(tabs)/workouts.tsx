@@ -472,7 +472,7 @@ export default function WorkoutsScreen() {
                         <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>
                             {date === new Date().toISOString().split('T')[0] ? 'Bugün' : new Date(date).toLocaleDateString('tr-TR')}
                         </Text>
-                        {grouped[date].map(log => (
+                        {grouped[date].map((log: any) => (
                             <Card key={log.id} style={styles.logCard}>
                                 <View style={styles.logHeader}>
                                     <View style={{ flex: 1 }}>
@@ -534,159 +534,159 @@ export default function WorkoutsScreen() {
                             <Text style={[styles.tabText, activeTab === 'nutrition' && styles.activeTabText]}>Beslenme</Text>
                         </TouchableOpacity>
                     </View>
+                </View>
 
-                    <ScrollView
-                        style={{ flex: 1 }}
-                        contentContainerStyle={styles.scrollContent}
-                        keyboardShouldPersistTaps="handled"
-                        keyboardDismissMode="on-drag"
-                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+                <ScrollView
+                    style={{ flex: 1 }}
+                    contentContainerStyle={styles.scrollContent}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+                >
+                    {activeTab === 'workout' ? renderWorkoutContent() :
+                        activeTab === 'diet' ? renderDietContent() : renderNutritionContent()}
+                </ScrollView>
+
+                {/* Manual Diet Entry Modal */}
+                {isManualDietMode && (
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        style={styles.modalOverlay}
                     >
-                        {activeTab === 'workout' ? renderWorkoutContent() :
-                            activeTab === 'diet' ? renderDietContent() : renderNutritionContent()}
-                    </ScrollView>
+                        <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+                            <ScrollView showsVerticalScrollIndicator={false} nestedScrollEnabled={true} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+                                <Text style={styles.modalTitle}>Manuel Diyet Girişi</Text>
 
-                    {/* Manual Diet Entry Modal */}
-                    {isManualDietMode && (
-                        <KeyboardAvoidingView
-                            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                            style={styles.modalOverlay}
-                        >
-                            <View style={[styles.modalContent, { maxHeight: '80%' }]}>
-                                <ScrollView showsVerticalScrollIndicator={false} nestedScrollEnabled={true} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-                                    <Text style={styles.modalTitle}>Manuel Diyet Girişi</Text>
+                                <View style={styles.formGroup}>
+                                    <Text style={styles.label}>Hedef / Plan Adı</Text>
+                                    <TextInput
+                                        style={styles.aiInputModal}
+                                        placeholder="Örn: 1. Ay Hacim Planı"
+                                        value={manualDietData.goal}
+                                        onChangeText={t => setManualDietData({ ...manualDietData, goal: t })}
+                                    />
+                                </View>
 
-                                    <View style={styles.formGroup}>
-                                        <Text style={styles.label}>Hedef / Plan Adı</Text>
+                                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.label}>Kalori</Text>
+                                        <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.daily_calories} onChangeText={t => setManualDietData({ ...manualDietData, daily_calories: t })} />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.label}>P (g)</Text>
+                                        <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.protein_g} onChangeText={t => setManualDietData({ ...manualDietData, protein_g: t })} />
+                                    </View>
+                                </View>
+
+                                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.label}>K (g)</Text>
+                                        <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.carbs_g} onChangeText={t => setManualDietData({ ...manualDietData, carbs_g: t })} />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.label}>Y (g)</Text>
+                                        <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.fat_g} onChangeText={t => setManualDietData({ ...manualDietData, fat_g: t })} />
+                                    </View>
+                                </View>
+
+                                <Text style={[styles.label, { marginBottom: 10 }]}>Öğünler</Text>
+                                {manualDietData.meals.map((meal, idx) => (
+                                    <View key={idx} style={{ marginBottom: 20, padding: 10, borderLeftWidth: 2, borderLeftColor: Colors.primary }}>
                                         <TextInput
-                                            style={styles.aiInputModal}
-                                            placeholder="Örn: 1. Ay Hacim Planı"
-                                            value={manualDietData.goal}
-                                            onChangeText={t => setManualDietData({ ...manualDietData, goal: t })}
+                                            style={[styles.aiInputModal, { minHeight: 40, marginBottom: 5 }]}
+                                            placeholder="Öğün Adı (Örn: Kahvaltı)"
+                                            value={meal.name}
+                                            onChangeText={t => {
+                                                const newMeals = [...manualDietData.meals];
+                                                newMeals[idx].name = t;
+                                                setManualDietData({ ...manualDietData, meals: newMeals });
+                                            }}
+                                        />
+                                        <TextInput
+                                            style={[styles.aiInputModal, { minHeight: 60 }]}
+                                            placeholder="Yiyecekler (Virgül ile ayırın)"
+                                            multiline
+                                            onChangeText={t => {
+                                                const newMeals = [...manualDietData.meals];
+                                                newMeals[idx].items = t.split(',').map(s => s.trim());
+                                                setManualDietData({ ...manualDietData, meals: newMeals });
+                                            }}
                                         />
                                     </View>
+                                ))}
 
-                                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={styles.label}>Kalori</Text>
-                                            <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.daily_calories} onChangeText={t => setManualDietData({ ...manualDietData, daily_calories: t })} />
-                                        </View>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={styles.label}>P (g)</Text>
-                                            <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.protein_g} onChangeText={t => setManualDietData({ ...manualDietData, protein_g: t })} />
-                                        </View>
-                                    </View>
-
-                                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={styles.label}>K (g)</Text>
-                                            <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.carbs_g} onChangeText={t => setManualDietData({ ...manualDietData, carbs_g: t })} />
-                                        </View>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={styles.label}>Y (g)</Text>
-                                            <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.fat_g} onChangeText={t => setManualDietData({ ...manualDietData, fat_g: t })} />
-                                        </View>
-                                    </View>
-
-                                    <Text style={[styles.label, { marginBottom: 10 }]}>Öğünler</Text>
-                                    {manualDietData.meals.map((meal, idx) => (
-                                        <View key={idx} style={{ marginBottom: 20, padding: 10, borderLeftWidth: 2, borderLeftColor: Colors.primary }}>
-                                            <TextInput
-                                                style={[styles.aiInputModal, { minHeight: 40, marginBottom: 5 }]}
-                                                placeholder="Öğün Adı (Örn: Kahvaltı)"
-                                                value={meal.name}
-                                                onChangeText={t => {
-                                                    const newMeals = [...manualDietData.meals];
-                                                    newMeals[idx].name = t;
-                                                    setManualDietData({ ...manualDietData, meals: newMeals });
-                                                }}
-                                            />
-                                            <TextInput
-                                                style={[styles.aiInputModal, { minHeight: 60 }]}
-                                                placeholder="Yiyecekler (Virgül ile ayırın)"
-                                                multiline
-                                                onChangeText={t => {
-                                                    const newMeals = [...manualDietData.meals];
-                                                    newMeals[idx].items = t.split(',').map(s => s.trim());
-                                                    setManualDietData({ ...manualDietData, meals: newMeals });
-                                                }}
-                                            />
-                                        </View>
-                                    ))}
-
-                                    <TouchableOpacity
-                                        style={{ alignItems: 'center', marginBottom: 20 }}
-                                        onPress={() => setManualDietData({
-                                            ...manualDietData,
-                                            meals: [...manualDietData.meals, { name: `${manualDietData.meals.length + 1}. Öğün`, time: '00:00', items: [''] }]
-                                        })}
-                                    >
-                                        <Text style={{ color: Colors.primary }}>+ Öğün Ekle</Text>
-                                    </TouchableOpacity>
-
-                                    <View style={styles.modalFooter}>
-                                        <TouchableOpacity
-                                            style={styles.btnSecondary}
-                                            onPress={() => {
-                                                setManualDietData({ goal: '', daily_calories: '', protein_g: '', carbs_g: '', fat_g: '', meals: [{ name: '1. Öğün', time: '08:00', items: [''] }] });
-                                                setIsManualDietMode(false);
-                                            }}
-                                        >
-                                            <Text style={styles.btnSecondaryText}>Vazgeç</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity style={styles.aiLogBtn} onPress={handleManualDietSubmit}>
-                                            {aiLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.aiLogBtnText}>Kaydet</Text>}
-                                        </TouchableOpacity>
-                                    </View>
-                                </ScrollView>
-                            </View>
-                        </KeyboardAvoidingView>
-                    )}
-
-                    {/* Logging Modal */}
-                    {isLogging && (
-                        <View style={styles.modalOverlay}>
-                            <View style={styles.modalContent}>
-                                <Text style={styles.modalTitle}>Besin Ara</Text>
-                                <TextInput
-                                    style={styles.modalInput}
-                                    placeholder="Besin ismi girin..."
-                                    placeholderTextColor="#666"
-                                    value={searchQuery}
-                                    onChangeText={setSearchQuery}
-                                />
-
-                                <ScrollView style={{ maxHeight: 300, marginTop: 15 }}>
-                                    {foods.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())).map(food => (
-                                        <TouchableOpacity
-                                            key={food.id}
-                                            style={styles.foodItem}
-                                            onPress={async () => {
-                                                try {
-                                                    const { addNutritionLog } = await import('@/services/api');
-                                                    await addNutritionLog({
-                                                        food_item_id: food.id,
-                                                        quantity_g: 100,
-                                                        meal_type: 'Atıştırmalık'
-                                                    });
-                                                    setIsLogging(false);
-                                                    loadData();
-                                                } catch (e) { console.error(e); }
-                                            }}
-                                        >
-                                            <Text style={styles.foodName}>{food.name}</Text>
-                                            <Text style={styles.foodMacros}>100g: {food.calories_100g} kcal</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-
-                                <TouchableOpacity style={styles.closeBtn} onPress={() => setIsLogging(false)}>
-                                    <Text style={styles.closeBtnText}>İptal</Text>
+                                <TouchableOpacity
+                                    style={{ alignItems: 'center', marginBottom: 20 }}
+                                    onPress={() => setManualDietData({
+                                        ...manualDietData,
+                                        meals: [...manualDietData.meals, { name: `${manualDietData.meals.length + 1}. Öğün`, time: '00:00', items: [''] }]
+                                    })}
+                                >
+                                    <Text style={{ color: Colors.primary }}>+ Öğün Ekle</Text>
                                 </TouchableOpacity>
-                            </View>
+
+                                <View style={styles.modalFooter}>
+                                    <TouchableOpacity
+                                        style={styles.btnSecondary}
+                                        onPress={() => {
+                                            setManualDietData({ goal: '', daily_calories: '', protein_g: '', carbs_g: '', fat_g: '', meals: [{ name: '1. Öğün', time: '08:00', items: [''] }] });
+                                            setIsManualDietMode(false);
+                                        }}
+                                    >
+                                        <Text style={styles.btnSecondaryText}>Vazgeç</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.aiLogBtn} onPress={handleManualDietSubmit}>
+                                        {aiLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.aiLogBtnText}>Kaydet</Text>}
+                                    </TouchableOpacity>
+                                </View>
+                            </ScrollView>
                         </View>
-                    )}
-                </View>
+                    </KeyboardAvoidingView>
+                )}
+
+                {/* Logging Modal */}
+                {isLogging && (
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
+                            <Text style={styles.modalTitle}>Besin Ara</Text>
+                            <TextInput
+                                style={styles.modalInput}
+                                placeholder="Besin ismi girin..."
+                                placeholderTextColor="#666"
+                                value={searchQuery}
+                                onChangeText={setSearchQuery}
+                            />
+
+                            <ScrollView style={{ maxHeight: 300, marginTop: 15 }}>
+                                {foods.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())).map(food => (
+                                    <TouchableOpacity
+                                        key={food.id}
+                                        style={styles.foodItem}
+                                        onPress={async () => {
+                                            try {
+                                                const { addNutritionLog } = await import('@/services/api');
+                                                await addNutritionLog({
+                                                    food_item_id: food.id,
+                                                    quantity_g: 100,
+                                                    meal_type: 'Atıştırmalık'
+                                                });
+                                                setIsLogging(false);
+                                                loadData();
+                                            } catch (e) { console.error(e); }
+                                        }}
+                                    >
+                                        <Text style={styles.foodName}>{food.name}</Text>
+                                        <Text style={styles.foodMacros}>100g: {food.calories_100g} kcal</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+
+                            <TouchableOpacity style={styles.closeBtn} onPress={() => setIsLogging(false)}>
+                                <Text style={styles.closeBtnText}>İptal</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                )}
             </SafeAreaView>
         </TouchableWithoutFeedback>
     );

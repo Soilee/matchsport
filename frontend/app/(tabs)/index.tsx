@@ -43,6 +43,7 @@ export default function DashboardScreen() {
   const [data, setData] = useState<ExtendedDashboardData | null>(null);
   const [tasks, setTasks] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [isAnnouncementsVisible, setIsAnnouncementsVisible] = useState(false);
   const lastFetch = useRef(0);
 
   const loadData = useCallback(async () => {
@@ -164,7 +165,7 @@ export default function DashboardScreen() {
                     <Text style={styles.liveCounterText}>Salonda Şu An: {data?.occupancy?.current_count || 0} Kişi Var</Text>
                   </View>
                 </View>
-                <TouchableOpacity style={styles.notificationBtn} onPress={() => router.push('/(tabs)/announcements' as any)}>
+                <TouchableOpacity style={styles.notificationBtn} onPress={() => setIsAnnouncementsVisible(true)}>
                   <Ionicons name="notifications-outline" size={24} color={Colors.text} />
                   {(data?.unreadNotifications || 0) > 0 && <View style={styles.notifBadge} />}
                 </TouchableOpacity>
@@ -252,6 +253,51 @@ export default function DashboardScreen() {
             </>
           )}
         </ScrollView>
+
+        {/* Announcements Modal */}
+        {isAnnouncementsVisible && (
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Duyurular</Text>
+                <TouchableOpacity onPress={() => setIsAnnouncementsVisible(false)}>
+                  <Ionicons name="close" size={24} color={Colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={{ maxHeight: 500 }} showsVerticalScrollIndicator={false}>
+                {data?.announcements && data.announcements.length > 0 ? (
+                  data.announcements.map((ann) => (
+                    <Card key={ann.id} style={styles.announcementCard}>
+                      <View style={styles.annHeader}>
+                        <View style={[styles.annTypeBadge, { backgroundColor: ann.type === 'campaign' ? 'rgba(255, 107, 53, 0.1)' : 'rgba(52, 199, 89, 0.1)' }]}>
+                          <Text style={[styles.annTypeText, { color: ann.type === 'campaign' ? Colors.primary : '#34C759' }]}>
+                            {ann.type === 'campaign' ? 'Kampanya' : 'Bilgilendirme'}
+                          </Text>
+                        </View>
+                        <Text style={styles.annDate}>{new Date(ann.publish_at).toLocaleDateString('tr-TR')}</Text>
+                      </View>
+                      <Text style={styles.annTitle}>{ann.title}</Text>
+                      <Text style={styles.annBody}>{ann.body}</Text>
+                    </Card>
+                  ))
+                ) : (
+                  <View style={styles.emptyAnn}>
+                    <Ionicons name="notifications-off-outline" size={48} color={Colors.textMuted} />
+                    <Text style={styles.emptyAnnText}>Henüz bir duyuru bulunmuyor.</Text>
+                  </View>
+                )}
+              </ScrollView>
+
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => setIsAnnouncementsVisible(false)}
+              >
+                <Text style={styles.modalCloseBtnText}>Kapat</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </SafeAreaView>
     </TouchableWithoutFeedback>
   );
@@ -408,5 +454,98 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     fontSize: 12,
     opacity: 0.5,
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    zIndex: 1000,
+  },
+  modalContent: {
+    width: '100%',
+    backgroundColor: Colors.surface,
+    borderRadius: 24,
+    padding: 24,
+    maxHeight: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: Colors.text,
+  },
+  announcementCard: {
+    marginBottom: 16,
+    padding: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  annHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  annTypeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  annTypeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  annDate: {
+    fontSize: 12,
+    color: Colors.textMuted,
+  },
+  annTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.text,
+    marginBottom: 6,
+  },
+  annBody: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    lineHeight: 20,
+  },
+  emptyAnn: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 12,
+  },
+  emptyAnnText: {
+    color: Colors.textMuted,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  modalCloseBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  modalCloseBtnText: {
+    color: Colors.text,
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
