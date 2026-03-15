@@ -28,6 +28,9 @@ export interface Membership {
     amount: number;
     total_price?: number;
     next_payment_date?: string;
+    package_type?: string;
+    last_expiry_notification?: string;
+    is_blocked?: boolean;
 }
 
 export interface HeatmapData {
@@ -150,6 +153,9 @@ export interface DashboardData {
         totalMembers: number;
         activeMembers: number;
         totalRevenue: number;
+        expiringIn1Day: number;
+        expiringIn7Days: number;
+        expiringIn14Days: number;
     };
     trainerStats?: {
         activeStudents: number;

@@ -196,7 +196,8 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             db.from('users').select('id, full_name, nickname, email, phone, role, profile_photo_url, kvkk_mask').eq('id', userId).single(),
             db.from('memberships').select('*').eq('user_id', userId).order('end_date', { ascending: false }).limit(1).maybeSingle(),
             db.from('gym_occupancy').select('current_count, max_capacity').order('recorded_at', { ascending: false }).limit(1).maybeSingle(),
-            db.from('gym_occupancy').select('hour_of_day, day_of_week, avg_count:current_count'),
+            // Only fetch last 500 rows for heatmap to prevent RAM issues
+            db.from('gym_occupancy').select('hour_of_day, day_of_week, avg_count:current_count').order('recorded_at', { ascending: false }).limit(500),
             db.from('workout_programs').select('*').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle(),
             db.from('pr_records').select('*, exercises(name, muscle_group)').eq('user_id', userId).order('achieved_at', { ascending: false }).limit(5),
             db.from('body_measurements').select('*').eq('user_id', userId).order('measured_at', { ascending: false }).limit(10),
@@ -216,7 +217,29 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             todayAtMidnight.setHours(0, 0, 0, 0);
             const endDate = new Date(membership.end_date);
             if (!isNaN(endDate.getTime())) {
-                membership.remaining_days = Math.max(0, Math.ceil((endDate.getTime() - todayAtMidnight.getTime()) / (1000 * 60 * 60 * 24)));
+                const diffTime = endDate.getTime() - todayAtMidnight.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                membership.remaining_days = Math.max(0, diffDays);
+
+                // Check for expiry notifications (14, 7, 3, 2, 1 days)
+                const expiryTriggers = [14, 7, 3, 2, 1];
+                const todayStr = todayAtMidnight.toISOString().split('T')[0];
+
+                if (expiryTriggers.includes(membership.remaining_days) && membership.last_expiry_notification !== todayStr && membership.status === 'active') {
+                    const message = `Üyeliğinizin bitmesine ${membership.remaining_days} gün kaldı! Yenilemek için lütfen bizimle iletişime geçin.`;
+
+                    // Add in-app notification
+                    await db.from('notifications').insert({
+                        user_id: userId,
+                        title: 'Üyelik Hatırlatması',
+                        body: message,
+                        type: 'system',
+                        is_read: false
+                    });
+
+                    // Update last notification date
+                    await db.from('memberships').update({ last_expiry_notification: todayStr }).eq('id', membership.id);
+                }
             }
         }
 
@@ -247,15 +270,28 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
 
         let adminStats = null;
         if (user && (user.role === 'admin' || user.role === 'superadmin')) {
-            const [memCount, activeCount, revSum] = await Promise.all([
+            const todayStr = new Date().toISOString().split('T')[0];
+            const in1DayStr = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const in7DaysStr = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const in14DaysStr = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+            const [memCount, activeCount, revSum, expiring1, expiring7, expiring14] = await Promise.all([
                 db.from('users').select('id', { count: 'exact', head: true }).eq('role', 'member'),
                 db.from('memberships').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-                db.from('memberships').select('amount')
+                // Only sum revenue from last 2000 memberships to avoid memory issues (compromise for now)
+                db.from('memberships').select('amount').order('created_at', { ascending: false }).limit(2000),
+                db.from('memberships').select('id', { count: 'exact', head: true }).eq('status', 'active').lte('end_date', in1DayStr).gte('end_date', todayStr),
+                db.from('memberships').select('id', { count: 'exact', head: true }).eq('status', 'active').lte('end_date', in7DaysStr).gte('end_date', todayStr),
+                db.from('memberships').select('id', { count: 'exact', head: true }).eq('status', 'active').lte('end_date', in14DaysStr).gte('end_date', todayStr),
             ]);
+
             adminStats = {
                 totalMembers: memCount.count || 0,
                 activeMembers: activeCount.count || 0,
-                totalRevenue: (revSum.data || []).reduce((acc, curr) => acc + (curr.amount || 0), 0)
+                totalRevenue: (revSum.data || []).reduce((acc, curr) => acc + (curr.amount || 0), 0),
+                expiringIn1Day: expiring1.count || 0,
+                expiringIn7Days: expiring7.count || 0,
+                expiringIn14Days: expiring14.count || 0
             };
         }
 
@@ -298,6 +334,31 @@ router.post('/checkin', authMiddleware, async (req, res) => {
     try {
         const db = getDb();
         const userId = req.user.id;
+
+        // 1. Check Maintenance Mode
+        const { data: config } = await db.from('app_config').select('value').eq('key', 'turnstile_maintenance').maybeSingle();
+        if (config?.value?.enabled) {
+            return res.status(503).json({ error: config.value.message || 'Turnike sistemi şu an bakımdadır.' });
+        }
+
+        // 2. Check Overdue Installments (7-day grace)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const { data: overdue } = await db.from('installments')
+            .select('id, due_date')
+            .eq('user_id', userId)
+            .eq('status', 'pending')
+            .lt('due_date', sevenDaysAgo.toISOString().split('T')[0])
+            .limit(1)
+            .maybeSingle();
+
+        if (overdue) {
+            // Auto-freeze membership if not already
+            await db.from('memberships').update({ status: 'frozen' }).eq('user_id', userId).eq('status', 'active');
+            return res.status(403).json({ error: 'Gecikmiş ödemeniz bulunmaktadır. Lütfen ödeme yapınız.' });
+        }
+
+        // 3. Regular Membership Check
         const { data: membership } = await db.from('memberships').select('*').eq('user_id', userId).in('status', ['active', 'grace']).order('end_date', { ascending: false }).limit(1).maybeSingle();
         if (!membership) return res.status(403).json({ error: 'Aktif üyeliğiniz yok' });
 
@@ -317,6 +378,7 @@ router.post('/checkin', authMiddleware, async (req, res) => {
 
         res.json({ message: 'Giriş başarılı!' });
     } catch (err) {
+        console.error('Checkin Error:', err);
         res.status(500).json({ error: 'Giriş başarısız' });
     }
 });
@@ -343,6 +405,46 @@ router.post('/checkout', authMiddleware, async (req, res) => {
         res.json({ message: 'Çıkış yapıldı' });
     } catch (err) {
         res.status(500).json({ error: 'Çıkış başarısız' });
+    }
+});
+
+// =================== TURNSTILE ADMIN ===================
+
+router.get('/admin/turnstile/logs', authMiddleware, requireRole('admin'), async (req, res) => {
+    try {
+        const db = getDb();
+        const { data, error } = await db.from('check_ins')
+            .select('*, users(full_name, email, role)')
+            .order('check_in_time', { ascending: false })
+            .limit(100);
+        if (error) throw error;
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: 'Loglar yüklenemedi' });
+    }
+});
+
+router.post('/admin/turnstile/config', authMiddleware, requireRole('admin'), async (req, res) => {
+    try {
+        const { enabled, message } = req.body;
+        const db = getDb();
+        await db.from('app_config').upsert({
+            key: 'turnstile_maintenance',
+            value: { enabled: !!enabled, message: message || 'Turnike sistemi şu an bakımdadır.' },
+            updated_at: new Date().toISOString()
+        });
+        res.json({ message: 'Turnike ayarları güncellendi' });
+    } catch (err) {
+        res.status(500).json({ error: 'Ayarlar güncellenemedi' });
+    }
+});
+
+router.get('/admin/turnstile/config', authMiddleware, async (req, res) => {
+    try {
+        const { data } = await getDb().from('app_config').select('*').eq('key', 'turnstile_maintenance').maybeSingle();
+        res.json(data?.value || { enabled: false, message: '' });
+    } catch (err) {
+        res.status(500).json({ error: 'Ayarlar yüklenemedi' });
     }
 });
 
@@ -683,24 +785,95 @@ router.post('/admin/payments', authMiddleware, requireRole('admin', 'trainer'), 
         }
 
         const safeTotalPrice = total_price ? parseFloat(total_price) : parseFloat(amount);
+        const paidAmount = parseFloat(amount);
+        const instCount = parseInt(installment_count || 1);
 
-        // Insert payment as pending
-        const { data, error } = await db.from('payments').insert({
+        // 1. Record the Payment
+        const { data: payment, error: pError } = await db.from('payments').insert({
             user_id,
-            amount: parseFloat(amount),
+            amount: paidAmount,
             payment_method: payment_method || 'cash',
             package_type: package_type || 'Standart',
             payment_type: payment_type || 'cash_full',
-            installment_count: parseInt(installment_count || 1),
+            installment_count: instCount,
             total_price: safeTotalPrice,
             processed_by: req.user.id,
-            status: 'completed', // Direct complete as requested
+            status: 'completed',
             notes: notes || null
         }).select().single();
 
-        if (error) throw error;
+        if (pError) throw pError;
 
-        res.json({ message: 'Ödeme beklemede olarak kaydedildi. Onay bekleniyor.', payment: data });
+        // 2. Handle Installments if applicable
+        if (payment_type === 'installment' && instCount > 1) {
+            const remaining = safeTotalPrice - paidAmount;
+            const instAmount = (remaining / (instCount - 1)).toFixed(2);
+
+            const installments = [];
+            for (let i = 1; i < instCount; i++) {
+                const dueDate = new Date();
+                dueDate.setMonth(dueDate.getMonth() + i);
+                installments.push({
+                    user_id,
+                    membership_id: null, // Will update after membership entry/update
+                    amount: parseFloat(instAmount),
+                    due_date: dueDate.toISOString().split('T')[0],
+                    status: 'pending'
+                });
+            }
+            if (installments.length > 0) {
+                await db.from('installments').insert(installments);
+            }
+        }
+
+        // 3. Update/Extend Membership
+        const { data: current } = await db.from('memberships').select('*').eq('user_id', user_id).order('end_date', { ascending: false }).limit(1).maybeSingle();
+
+        let daysToAdd = 30;
+        if (package_type === '3_months') daysToAdd = 90;
+        else if (package_type === '6_months') daysToAdd = 180;
+        else if (package_type === '12_months') daysToAdd = 365;
+        else if (package_type === '6+6') daysToAdd = 365;
+
+        let newEnd = new Date();
+        if (current && new Date(current.end_date) > new Date()) {
+            newEnd = new Date(current.end_date);
+        }
+        newEnd.setDate(newEnd.getDate() + daysToAdd);
+
+        const diffTime = Math.max(0, newEnd - new Date());
+        const remainingDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (current) {
+            await db.from('memberships').update({
+                end_date: newEnd.toISOString().split('T')[0],
+                status: 'active',
+                remaining_days: remainingDays,
+                package_type: package_type || current.package_type,
+                amount: (current.amount || 0) + paidAmount
+            }).eq('id', current.id);
+
+            // Link installments to this membership
+            await db.from('installments').update({ membership_id: current.id }).eq('user_id', user_id).is('membership_id', null);
+        } else {
+            const { data: newMem } = await db.from('memberships').insert({
+                user_id,
+                start_date: new Date().toISOString().split('T')[0],
+                end_date: newEnd.toISOString().split('T')[0],
+                total_days: daysToAdd,
+                remaining_days: remainingDays,
+                status: 'active',
+                package_type: package_type || 'Standart',
+                amount: paidAmount
+            }).select().single();
+
+            // Link installments to this membership
+            await db.from('installments').update({ membership_id: newMem.id }).eq('user_id', user_id).is('membership_id', null);
+        }
+
+        await logAudit('PAYMENT_COMPLETED', req.user.id, user_id, { amount: paidAmount, package_type });
+
+        res.json({ message: 'Ödeme ve taksitler başarıyla kaydedildi.', payment });
     } catch (err) {
         console.error('Payment Error:', err);
         res.status(500).json({ error: 'Ödeme kaydı başarısız' });
@@ -1047,19 +1220,33 @@ router.post('/nutrition/ai-log-meal', authMiddleware, async (req, res) => {
         }
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
         // Get user info for context
-        const { data: userStats } = await db.from('users').select('height_cm, weight_kg').eq('id', req.user.id).single();
+        const { data: userStats } = await db.from('users').select('height_cm, weight_kg, goal').eq('id', req.user.id).single();
 
-        const prompt = `Lütfen şu yediğim yemeği veya ifadeyi besin değerleri (makrolar) açısından analiz et ve sadece JSON dön. JSON formatı kesinlikle şu olmalı: {"protein_g": sayi, "carbs_g": sayi, "fat_g": sayi, "calories": sayi, "feedback": "Kisa Türkce feedback (Örn: Yuksek proteinli harika bir secim)"}
-        Kullanici Bilgisi: Kilo ${userStats?.weight_kg || 'Bilinmiyor'}kg, Boy ${userStats?.height_cm || 'Bilinmiyor'}cm
-        İfade: "${text}"`;
+        const prompt = `Sen profesyonel bir diyetisyen ve beslenme uzmanısın. Kullanıcının girdiği şu ifadeyi analiz et: "${text}"
+
+        Kullanıcı Bilgileri:
+        - Kilo: ${userStats?.weight_kg || 'Bilinmiyor'} kg
+        - Boy: ${userStats?.height_cm || 'Bilinmiyor'} cm
+        - Hedef: ${userStats?.goal || 'Bilinmiyor'}
+
+        Lütfen bu ifadeden yola çıkarak porsiyon tahmini yap ve besin değerlerini (protein, karbonhidrat, yağ ve toplam kalori) hesapla.
+        Sadece JSON formatında cevap dön. JSON formatı kesinlikle şu olmalı:
+        {
+          "protein_g": sayi,
+          "carbs_g": sayi, 
+          "fat_g": sayi, 
+          "calories": sayi, 
+          "feedback": "Türkçe kısa tavsiye ve analiz (Örn: Bu öğün hedefine göre biraz yüksek kalorili, akşam daha hafif geçirmelisin)"
+        }
+        Cevabın sadece JSON objesi olsun, markdown blockları içermesin.`;
 
         const result = await model.generateContent(prompt);
         const responseText = result.response.text();
         const match = responseText.match(/\{[\s\S]*\}/);
-        if (!match) throw new Error("JSON formatı alınamadı");
+        if (!match) throw new Error("AI'dan geçerli bir JSON yanıtı alınamadı");
 
         const macros = JSON.parse(match[0]);
 

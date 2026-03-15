@@ -72,7 +72,7 @@ const HeatmapComponent = ({ data }) => {
 };
 
 const App = () => {
-  const [stats, setStats] = useState({ totalMembers: 0, activeMembers: 0, totalRevenue: 0, occupancy: 0 });
+  const [stats, setStats] = useState({ totalMembers: 0, activeMembers: 0, totalRevenue: 0, occupancy: 0, expiringIn1Day: 0, expiringIn7Days: 0, expiringIn14Days: 0 });
   const [members, setMembers] = useState([]);
   const [trainers, setTrainers] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -86,6 +86,8 @@ const App = () => {
   const [financeData, setFinanceData] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [turnstileLogs, setTurnstileLogs] = useState([]);
+  const [turnstileConfig, setTurnstileConfig] = useState({ enabled: false, message: '' });
 
   const token = localStorage.getItem('token');
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
@@ -103,7 +105,19 @@ const App = () => {
   useEffect(() => {
     if (activeView === 'finance' && isAdmin) fetchFinance();
     if (activeView === 'audit' && isAdmin) fetchAuditLogs();
+    if (activeView === 'turnstile' && isAdmin) fetchTurnstile();
   }, [activeView]);
+
+  async function fetchTurnstile() {
+    try {
+      const [logs, config] = await Promise.all([
+        fetch(`${API_URL}/admin/turnstile/logs`, { headers }).then(r => r.json()),
+        fetch(`${API_URL}/admin/turnstile/config`, { headers }).then(r => r.json())
+      ]);
+      setTurnstileLogs(logs || []);
+      setTurnstileConfig(config || { enabled: false, message: '' });
+    } catch (e) { console.error(e); }
+  }
 
   async function fetchLiveOccupancy() {
     try {
@@ -152,7 +166,10 @@ const App = () => {
         totalMembers: dashRes.adminStats?.totalMembers || 0,
         activeMembers: dashRes.adminStats?.activeMembers || 0,
         totalRevenue: dashRes.adminStats?.totalRevenue || 0,
-        occupancy: dashRes.occupancy?.current_count || 0
+        occupancy: dashRes.occupancy?.current_count || 0,
+        expiringIn1Day: dashRes.adminStats?.expiringIn1Day || 0,
+        expiringIn7Days: dashRes.adminStats?.expiringIn7Days || 0,
+        expiringIn14Days: dashRes.adminStats?.expiringIn14Days || 0,
       });
       setMembers(memberList || []);
       setTasks(tasksRes.data || []);
@@ -347,6 +364,7 @@ const App = () => {
           <button className={`nav-item ${activeView === 'tasks' ? 'active' : ''}`} onClick={() => setActiveView('tasks')}><CheckSquare size={20} /> Görevler</button>
           <button className={`nav-item ${activeView === 'announcements' ? 'active' : ''}`} onClick={() => setActiveView('announcements')}><Bell size={20} /> Duyurular</button>
           {isAdmin && (<>
+            <button className={`nav-item ${activeView === 'turnstile' ? 'active' : ''}`} onClick={() => setActiveView('turnstile')}><ShieldCheck size={20} /> Turnike Yönetimi</button>
             <button className={`nav-item ${activeView === 'finance' ? 'active' : ''}`} onClick={() => setActiveView('finance')}><CreditCard size={20} /> Finansal</button>
             <button className={`nav-item ${activeView === 'audit' ? 'active' : ''}`} onClick={() => setActiveView('audit')}><Activity size={20} /> Aktivite Kayıtları</button>
           </>)}
@@ -377,8 +395,74 @@ const App = () => {
             {isAdmin && <StatCard icon={<TrendingUp color="#34C759" />} label="Toplam Gelir" value={`₺${stats.totalRevenue.toLocaleString()}`} sub="Tüm zamanlar" />}
             <StatCard icon={<Activity color="#FF9500" />} label="Anlık Doluluk" value={`${liveCount} Kişi`} sub="Salondaki kişi sayısı" />
           </div>
+          <div className="stats-subtitle" style={{ marginTop: '2rem' }}>Üyeliği Bitmek Üzere Olanlar</div>
+          <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginTop: '1rem' }}>
+            <StatCard label="1 Gün Kalanlar" value={stats.expiringIn1Day} sub="Bugün/Yarın Bitiş" variant="danger" />
+            <StatCard label="7 Gün Kalanlar" value={stats.expiringIn7Days} sub="1 Hafta İçinde" variant="warning" />
+            <StatCard label="14 Gün Kalanlar" value={stats.expiringIn14Days} sub="2 Hafta İçinde" variant="info" />
+          </div>
           <HeatmapComponent data={heatmapData} />
         </>)}
+
+        {/* TURNSTILE LOGS & CONFIG */}
+        {activeView === 'turnstile' && isAdmin && (
+          <div className="turnstile-view">
+            <div className="config-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '1.5rem', borderRadius: '12px', marginBottom: '2rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3>Turnike Bakım Modu</h3>
+                  <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem' }}>Aktif edildiğinde kimse giriş yapamaz.</p>
+                </div>
+                <label className="switch">
+                  <input type="checkbox" checked={turnstileConfig.enabled} onChange={async (e) => {
+                    const newStatus = e.target.checked;
+                    await fetch(`${API_URL}/admin/turnstile/config`, {
+                      method: 'POST',
+                      headers,
+                      body: JSON.stringify({ enabled: newStatus, message: turnstileConfig.message })
+                    });
+                    fetchTurnstile();
+                  }} />
+                  <span className="slider round"></span>
+                </label>
+              </div>
+              {turnstileConfig.enabled && (
+                <div style={{ marginTop: '1rem' }}>
+                  <input className="modal-input" value={turnstileConfig.message} onChange={(e) => setTurnstileConfig({ ...turnstileConfig, message: e.target.value })} placeholder="Bakım mesajı..." />
+                  <button className="btn-action" style={{ marginTop: '0.5rem' }} onClick={() => {
+                    fetch(`${API_URL}/admin/turnstile/config`, {
+                      method: 'POST',
+                      headers,
+                      body: JSON.stringify(turnstileConfig)
+                    });
+                  }}>Mesajı Güncelle</button>
+                </div>
+              )}
+            </div>
+
+            <div className="table-container enterprise-table">
+              <div className="section-header">
+                <h3>Turnike Geçiş Kayıtları</h3>
+                <button className="btn-action" onClick={fetchTurnstile}>🔄 Yenile</button>
+              </div>
+              <table>
+                <thead>
+                  <tr><th>Üye</th><th>Giriş Zamanı</th><th>Çıkış Zamanı</th><th>Süre</th></tr>
+                </thead>
+                <tbody>
+                  {turnstileLogs.map(log => (
+                    <tr key={log.id}>
+                      <td><strong>{log.users?.full_name}</strong><br /><span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{log.users?.email}</span></td>
+                      <td>{new Date(log.check_in_time).toLocaleString('tr-TR')}</td>
+                      <td>{log.check_out_time ? new Date(log.check_out_time).toLocaleString('tr-TR') : <span className="badge badge-active">İÇERIDE</span>}</td>
+                      <td>{log.duration_minutes ? `${log.duration_minutes} dk` : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* MEMBERS */}
         {activeView === 'members' && (
@@ -764,12 +848,12 @@ const MemberInstallmentView = ({ userId }) => {
   );
 };
 
-const StatCard = ({ icon, label, value, sub }) => (
-  <div className="stat-card">
-    <div style={{ marginBottom: '1rem', background: 'rgba(255,255,255,0.05)', width: 'fit-content', padding: '0.8rem', borderRadius: '12px' }}>{icon}</div>
+const StatCard = ({ icon, label, value, sub, variant }) => (
+  <div className={`stat-card ${variant ? `stat-${variant}` : ''}`}>
+    <div className="stat-icon-wrapper">{icon}</div>
     <div className="stat-label">{label}</div>
     <div className="stat-value">{value}</div>
-    {sub && <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.5rem' }}>{sub}</div>}
+    {sub && <div className="stat-sub">{sub}</div>}
   </div>
 );
 

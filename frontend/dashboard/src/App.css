@@ -171,12 +171,22 @@ body {
   border: 1px solid var(--border);
   padding: 1.8rem;
   border-radius: 20px;
-  transition: transform 0.3s;
+  transition: transform 0.3s, border-color 0.3s;
+  display: flex;
+  flex-direction: column;
 }
 
 .stat-card:hover {
   transform: translateY(-5px);
   border-color: rgba(255, 59, 48, 0.2);
+}
+
+.stat-icon-wrapper {
+  margin-bottom: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  width: fit-content;
+  padding: 0.8rem;
+  border-radius: 12px;
 }
 
 .stat-label {
@@ -192,6 +202,37 @@ body {
   font-size: 2.2rem;
   font-weight: 900;
   letter-spacing: -1px;
+}
+
+.stat-sub {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 0.5rem;
+}
+
+/* Stat Variants */
+.stat-danger {
+  border-left: 4px solid #FF3B30;
+}
+
+.stat-danger .stat-value {
+  color: #FF3B30;
+}
+
+.stat-warning {
+  border-left: 4px solid #FF9F0A;
+}
+
+.stat-warning .stat-value {
+  color: #FF9F0A;
+}
+
+.stat-info {
+  border-left: 4px solid #007AFF;
+}
+
+.stat-info .stat-value {
+  color: #007AFF;
 }
 
 /* TABLE STYLES */

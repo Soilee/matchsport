@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import Card from '@/components/common/Card';
 import { Membership } from '@/types';
 import { router } from 'expo-router';
+import Svg, { Circle } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface Props {
     membership: Membership | null;
@@ -13,7 +15,7 @@ interface Props {
 export default function MembershipCard({ membership }: Props) {
     if (!membership) {
         return (
-            <Card>
+            <Card style={styles.emptyCard}>
                 <View style={styles.header}>
                     <Ionicons name="card" size={22} color={Colors.warning} />
                     <Text style={styles.title}>Üyelik Durumu</Text>
@@ -23,156 +25,217 @@ export default function MembershipCard({ membership }: Props) {
         );
     }
 
-    const { remaining_days, total_days, status } = membership;
-    const progress = remaining_days / total_days;
-    const circumference = 2 * Math.PI * 45;
-    const strokeDashoffset = circumference * (1 - progress);
+    const { remaining_days, total_days, status, package_type, end_date } = membership;
+
+    // SVG Circular Progress Logic
+    const size = 100;
+    const strokeWidth = 8;
+    const radius = (size - strokeWidth) / 2;
+    const circumference = radius * 2 * Math.PI;
+    const progress = Math.min(1, Math.max(0, remaining_days / (total_days || 30)));
+    const strokeDashoffset = circumference - progress * circumference;
 
     const getStatusConfig = () => {
         switch (status) {
             case 'active':
-                return { color: Colors.success, icon: 'checkmark-circle' as const, text: 'Aktif ✅' };
+                return { color: '#FF6B35', icon: 'checkmark-circle' as const, label: 'AKTİF ÜYE', glow: true };
             case 'grace':
-                return { color: Colors.warning, icon: 'warning' as const, text: 'Tolerans ⚠️' };
+                return { color: '#FF9F0A', icon: 'alert-circle' as const, label: 'ÖDEME BEKLENİYOR', glow: true };
             case 'expired':
-                return { color: Colors.error, icon: 'close-circle' as const, text: 'Süresi Dolmuş ❌' };
+                return { color: '#FF3B30', icon: 'close-circle' as const, label: 'SÜRESİ DOLDU', glow: false };
             case 'frozen':
-                return { color: Colors.info, icon: 'snow' as const, text: 'Dondurulmuş ❄️' };
+                return { color: '#007AFF', icon: 'snow' as const, label: 'DONDURULDU', glow: false };
             default:
-                return { color: Colors.textMuted, icon: 'help-circle' as const, text: 'Bilinmiyor' };
+                return { color: '#8E8E93', icon: 'help-circle' as const, label: 'BİLİNMİYOR', glow: false };
         }
     };
 
     const config = getStatusConfig();
 
     return (
-        <TouchableOpacity onPress={() => router.push('/membershipDetail' as any)}>
-            <Card glow={status === 'grace'}>
-                <View style={styles.header}>
-                    <Ionicons name="card" size={22} color={config.color} />
-                    <Text style={styles.title}>Üyelik Durumu</Text>
-                    <View style={[styles.statusBadge, { backgroundColor: `${config.color}20` }]}>
-                        <Text style={[styles.statusText, { color: config.color }]}>{config.text}</Text>
-                    </View>
-                </View>
-
-                <View style={styles.body}>
-                    {/* Circular progress */}
-                    <View style={styles.circleContainer}>
-                        <View style={styles.circleOuter}>
-                            <View style={styles.circleInner}>
-                                <Text style={[styles.daysNumber, { color: config.color }]}>{remaining_days}</Text>
-                                <Text style={styles.daysLabel}>gün kaldı</Text>
-                            </View>
+        <TouchableOpacity activeOpacity={0.9} onPress={() => router.push('/membershipDetail' as any)}>
+            <View style={[styles.container, { borderColor: config.color }]}>
+                <LinearGradient
+                    colors={['rgba(255,107,53,0.1)', 'rgba(0,0,0,0.4)']}
+                    style={styles.gradient}
+                >
+                    <View style={styles.header}>
+                        <View style={styles.titleGroup}>
+                            <Text style={styles.titleText}>MatchSport Üyelik</Text>
+                            <Text style={styles.packageText}>{package_type || 'Standart Paket'}</Text>
+                        </View>
+                        <View style={[styles.statusTag, { backgroundColor: config.color }]}>
+                            <Ionicons name={config.icon} size={12} color="white" />
+                            <Text style={styles.statusTagText}>{config.label}</Text>
                         </View>
                     </View>
 
-                    <View style={styles.details}>
-                        <View style={styles.detailRow}>
-                            <Ionicons name="calendar-outline" size={16} color={Colors.textSecondary} />
-                            <Text style={styles.detailText}>Bitiş: {membership.end_date}</Text>
-                        </View>
-                        <View style={styles.detailRow}>
-                            <Ionicons name="time-outline" size={16} color={Colors.textSecondary} />
-                            <Text style={styles.detailText}>Toplam: {total_days} gün</Text>
-                        </View>
-                        {status === 'grace' && (
-                            <View style={[styles.warningBox]}>
-                                <Text style={styles.warningText}>
-                                    ⚠️ Ödeme gerekli! {membership.grace_days_remaining} gün tolerans kaldı.
-                                </Text>
+                    <View style={styles.content}>
+                        <View style={styles.gaugeContainer}>
+                            <Svg width={size} height={size}>
+                                {/* Background Circle */}
+                                <Circle
+                                    cx={size / 2}
+                                    cy={size / 2}
+                                    r={radius}
+                                    stroke="rgba(255,255,255,0.05)"
+                                    strokeWidth={strokeWidth}
+                                    fill="none"
+                                />
+                                {/* Progress Circle */}
+                                <Circle
+                                    cx={size / 2}
+                                    cy={size / 2}
+                                    r={radius}
+                                    stroke={config.color}
+                                    strokeWidth={strokeWidth}
+                                    fill="none"
+                                    strokeDasharray={`${circumference} ${circumference}`}
+                                    strokeDashoffset={strokeDashoffset}
+                                    strokeLinecap="round"
+                                    transform={`rotate(-90 ${size / 2} ${size / 2})`}
+                                />
+                            </Svg>
+                            <View style={styles.gaugeCenter}>
+                                <Text style={[styles.daysText, { color: config.color }]}>{remaining_days}</Text>
+                                <Text style={styles.daysLabel}>KALAN GÜN</Text>
                             </View>
-                        )}
+                        </View>
+
+                        <View style={styles.infoContainer}>
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoLabel}>Bitiş Tarihi</Text>
+                                <Text style={styles.infoValue}>{end_date}</Text>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoLabel}>Toplam Süre</Text>
+                                <Text style={styles.infoValue}>{total_days} Gün</Text>
+                            </View>
+                            <View style={styles.progressTrack}>
+                                <View style={[styles.progressBar, { width: `${progress * 100}%`, backgroundColor: config.color }]} />
+                            </View>
+                        </View>
                     </View>
-                </View>
-            </Card>
+                </LinearGradient>
+            </View>
         </TouchableOpacity>
     );
 }
 
 const styles = StyleSheet.create({
+    container: {
+        borderRadius: 24,
+        borderWidth: 1.5,
+        backgroundColor: '#0A0A0A',
+        overflow: 'hidden',
+        marginVertical: 10,
+    },
+    gradient: {
+        padding: 20,
+    },
     header: {
         flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 20,
+    },
+    titleGroup: {
+        flex: 1,
+    },
+    titleText: {
+        color: 'white',
+        fontSize: 18,
+        fontWeight: '900',
+        letterSpacing: -0.5,
+    },
+    packageText: {
+        color: '#8E8E93',
+        fontSize: 13,
+        marginTop: 2,
+    },
+    statusTag: {
+        flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
-        marginBottom: 16,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 10,
+        gap: 6,
+    },
+    statusTagText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: '900',
+    },
+    content: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 25,
+    },
+    gaugeContainer: {
+        position: 'relative',
+        width: 100,
+        height: 100,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    gaugeCenter: {
+        position: 'absolute',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    daysText: {
+        fontSize: 28,
+        lineHeight: 32,
+        fontWeight: '900',
+    },
+    daysLabel: {
+        fontSize: 8,
+        color: '#8E8E93',
+        fontWeight: '700',
+        marginTop: -2,
+    },
+    infoContainer: {
+        flex: 1,
+        gap: 12,
+    },
+    infoRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    infoLabel: {
+        color: '#8E8E93',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    infoValue: {
+        color: 'white',
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    progressTrack: {
+        height: 4,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        borderRadius: 2,
+        marginTop: 5,
+        overflow: 'hidden',
+    },
+    progressBar: {
+        height: '100%',
+        borderRadius: 2,
+    },
+    emptyCard: {
+        padding: 20,
+    },
+    noMembership: {
+        color: '#8E8E93',
+        fontSize: 14,
+        textAlign: 'center',
+        marginVertical: 20,
     },
     title: {
         fontSize: 16,
-        fontWeight: '600',
-        color: Colors.text,
-        flex: 1,
-    },
-    statusBadge: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    statusText: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    body: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 20,
-    },
-    circleContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    circleOuter: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        borderWidth: 4,
-        borderColor: Colors.primary,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: 'rgba(255, 107, 53, 0.08)',
-    },
-    circleInner: {
-        alignItems: 'center',
-    },
-    daysNumber: {
-        fontSize: 32,
-        fontWeight: '800',
-    },
-    daysLabel: {
-        fontSize: 11,
-        color: Colors.textSecondary,
-        marginTop: -2,
-    },
-    details: {
-        flex: 1,
-        gap: 10,
-    },
-    detailRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    detailText: {
-        fontSize: 14,
-        color: Colors.textSecondary,
-    },
-    warningBox: {
-        backgroundColor: 'rgba(255, 214, 0, 0.1)',
-        padding: 10,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 214, 0, 0.2)',
-        marginTop: 4,
-    },
-    warningText: {
-        fontSize: 12,
-        color: Colors.warning,
-        fontWeight: '600',
-    },
-    noMembership: {
-        fontSize: 14,
-        color: Colors.textMuted,
-        textAlign: 'center',
-        paddingVertical: 20,
+        fontWeight: '700',
+        color: 'white',
     },
 });

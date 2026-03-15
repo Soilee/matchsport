@@ -9,12 +9,13 @@ import { login } from '@/services/api';
 export default function LoginScreen() {
     const [email, setEmail] = useState('admin@matchlessfitness.com');
     const [password, setPassword] = useState('123456');
+    const [rememberMe, setRememberMe] = useState(true);
     const [loading, setLoading] = useState(false);
 
     const handleLogin = async () => {
         try {
             setLoading(true);
-            await login(email, password);
+            await login(email, password, rememberMe);
             router.replace('/(tabs)');
         } catch (error: any) {
             Alert.alert('Hata', 'Giriş başarısız. Lütfen bilgilerinizi kontrol edin.');
@@ -58,6 +59,18 @@ export default function LoginScreen() {
                                 secureTextEntry
                             />
                         </View>
+
+                        <TouchableOpacity
+                            style={styles.rememberRow}
+                            onPress={() => setRememberMe(!rememberMe)}
+                        >
+                            <Ionicons
+                                name={rememberMe ? "checkbox" : "square-outline"}
+                                size={22}
+                                color={rememberMe ? Colors.primary : Colors.textMuted}
+                            />
+                            <Text style={styles.rememberText}>Beni Hatırla</Text>
+                        </TouchableOpacity>
 
                         <TouchableOpacity
                             style={[styles.loginButton, loading && styles.loginButtonDisabled]}
@@ -139,6 +152,17 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginTop: 8,
+    },
+    rememberRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginVertical: 4,
+    },
+    rememberText: {
+        color: Colors.textSecondary,
+        fontSize: 14,
+        fontWeight: '600',
     },
     loginButtonDisabled: {
         opacity: 0.7,

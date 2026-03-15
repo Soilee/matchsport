@@ -50,6 +50,36 @@ import { View, ActivityIndicator } from 'react-native';
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    async function init() {
+      try {
+        const token = await loadStoredToken();
+        if (token) {
+          // Token found, navigation will happen naturally to (tabs) 
+          // but we can enforce it if stuck on login.
+          // router.replace('/(tabs)');
+        } else {
+          // No token, redirect to login
+          router.replace('/login');
+        }
+      } catch (e) {
+        console.error('Init error:', e);
+      } finally {
+        setIsReady(true);
+      }
+    }
+    init();
+  }, []);
+
+  if (!isReady) {
+    return (
+      <View style={{ flex: 1, backgroundColor: 'black', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#FF3B30" />
+      </View>
+    );
+  }
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -58,6 +88,7 @@ function RootLayoutNav() {
         <Stack.Screen name="login" />
         <Stack.Screen name="workouts/manual" options={{ presentation: 'card' }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="membershipDetail" options={{ presentation: 'card' }} />
       </Stack>
     </ThemeProvider>
   );

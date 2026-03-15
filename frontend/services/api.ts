@@ -37,11 +37,11 @@ api.interceptors.response.use(
 
 let authToken: string | null = null;
 
-export const setAuthToken = async (token: string | null) => {
+export const setAuthToken = async (token: string | null, persist: boolean = true) => {
     authToken = token;
     if (token) {
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        if (Platform.OS !== 'web') {
+        if (Platform.OS !== 'web' && persist) {
             await AsyncStorage.setItem('authToken', token);
         }
     } else {
@@ -67,9 +67,9 @@ export const loadStoredToken = async () => {
     return null;
 };
 
-export const login = async (email: string, password: string) => {
+export const login = async (email: string, password: string, rememberMe: boolean = true) => {
     const res = await api.post('/auth/login', { email, password });
-    await setAuthToken(res.data.token);
+    await setAuthToken(res.data.token, rememberMe);
     return res.data;
 };
 

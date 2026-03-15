@@ -425,6 +425,16 @@ export default function WorkoutsScreen() {
             calories: acc.calories + (curr.calories || 0)
         }), { protein: 0, carbs: 0, fat: 0, calories: 0 });
 
+        // Group by date
+        const grouped = nutritionLogs.reduce((acc, log) => {
+            const date = log.log_date;
+            if (!acc[date]) acc[date] = [];
+            acc[date].push(log);
+            return acc;
+        }, {} as Record<string, any[]>);
+
+        const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+
         return (
             <View>
                 {/* 1. Daily Summary */}
@@ -457,33 +467,38 @@ export default function WorkoutsScreen() {
                 </TouchableOpacity>
 
                 {/* 3. History */}
-                <Text style={styles.sectionTitle}>Bugünkü Öğünlerim</Text>
-                {nutritionLogs.length === 0 ? (
+                {sortedDates.map(date => (
+                    <View key={date} style={{ marginBottom: 24 }}>
+                        <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>
+                            {date === new Date().toISOString().split('T')[0] ? 'Bugün' : new Date(date).toLocaleDateString('tr-TR')}
+                        </Text>
+                        {grouped[date].map(log => (
+                            <Card key={log.id} style={styles.logCard}>
+                                <View style={styles.logHeader}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.logMealType}>{log.meal_type || 'Öğün'}</Text>
+                                        <Text style={styles.logFoodName}>{log.food_items?.name || log.raw_text || 'İsimsiz Besin'}</Text>
+                                        {log.ai_feedback && (
+                                            <View style={styles.aiFeedbackContainer}>
+                                                <Ionicons name="sparkles" size={14} color={Colors.primary} />
+                                                <Text style={styles.aiFeedbackText}>{log.ai_feedback}</Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                    <View style={{ alignItems: 'flex-end' }}>
+                                        <Text style={styles.logCalories}>{log.calories} kcal</Text>
+                                        <Text style={styles.logWeight}>{log.quantity_g}g</Text>
+                                    </View>
+                                </View>
+                                <View style={styles.logMacros}>
+                                    <Text style={styles.logMacroText}>P: {log.protein_g}g • C: {log.carbs_g}g • Y: {log.fat_g}g</Text>
+                                </View>
+                            </Card>
+                        ))}
+                    </View>
+                ))}
+                {nutritionLogs.length === 0 && (
                     <Text style={styles.emptyText}>Henüz bir şey kaydetmediniz.</Text>
-                ) : (
-                    nutritionLogs.map(log => (
-                        <Card key={log.id} style={styles.logCard}>
-                            <View style={styles.logHeader}>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.logMealType}>{log.meal_type || 'Öğün'}</Text>
-                                    <Text style={styles.logFoodName}>{log.food_items?.name || log.raw_text || 'İsimsiz Besin'}</Text>
-                                    {log.ai_feedback && (
-                                        <View style={styles.aiFeedbackContainer}>
-                                            <Ionicons name="sparkles" size={14} color={Colors.primary} />
-                                            <Text style={styles.aiFeedbackText}>{log.ai_feedback}</Text>
-                                        </View>
-                                    )}
-                                </View>
-                                <View style={{ alignItems: 'flex-end' }}>
-                                    <Text style={styles.logCalories}>{log.calories} kcal</Text>
-                                    <Text style={styles.logWeight}>{log.quantity_g}g</Text>
-                                </View>
-                            </View>
-                            <View style={styles.logMacros}>
-                                <Text style={styles.logMacroText}>P: {log.protein_g}g • C: {log.carbs_g}g • Y: {log.fat_g}g</Text>
-                            </View>
-                        </Card>
-                    ))
                 )}
             </View>
         );
@@ -492,7 +507,7 @@ export default function WorkoutsScreen() {
     return (
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
             <SafeAreaView style={styles.container}>
-                <View style={[styles.header, { flex: 1 }]}>
+                <View style={styles.header}>
                     <Text style={styles.title}>Antrenman & Beslenme</Text>
                     <View style={styles.tabContainer}>
                         <TouchableOpacity
@@ -522,7 +537,7 @@ export default function WorkoutsScreen() {
 
                     <ScrollView
                         style={{ flex: 1 }}
-                        contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
+                        contentContainerStyle={styles.scrollContent}
                         keyboardShouldPersistTaps="handled"
                         keyboardDismissMode="on-drag"
                         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
