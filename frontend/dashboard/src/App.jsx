@@ -33,9 +33,11 @@ const formatAuditLog = (log) => {
 
   switch (log.action) {
     case 'MEMBERSHIP_EXTENDED':
-      return `${actorName}, ${targetName} üyesinin süresini ${details.days} gün uzattı. (${details.old_end_date} ➔ ${details.new_end_date})`;
+      return `${actorName}, ${targetName} üyesinin süresini ${details.days || '?'} gün uzattı. (Eski: ${details.old_end_date || 'N/A'} ➔ Yeni: ${details.new_end_date || 'N/A'})`;
+    case 'MEMBERSHIP_UPDATED':
+      return `${actorName}, ${targetName} üyelik bilgilerini güncelledi. (${details.new_status || ''})`;
     case 'PAYMENT_COMPLETED':
-      return `${actorName}, ${targetName} üyesinden ₺${details.amount} ödeme aldı. (${details.package_type})`;
+      return `${actorName}, ${targetName} üyesinden ₺${details.amount} ödeme aldı. (${details.package_type || 'Standart'})`;
     case 'ROLE_CHANGED':
       return `${actorName}, ${targetName} kullanıcısının rolünü ${details.old_role} ➔ ${details.new_role} olarak değiştirdi.`;
     case 'USER_REGISTERED':
@@ -391,10 +393,10 @@ const App = () => {
           <button className={`nav-item ${activeView === 'trainers' ? 'active' : ''}`} onClick={() => setActiveView('trainers')}><ShieldCheck size={20} /> Eğitmenler</button>
           <button className={`nav-item ${activeView === 'tasks' ? 'active' : ''}`} onClick={() => setActiveView('tasks')}><CheckSquare size={20} /> Görevler</button>
           <button className={`nav-item ${activeView === 'announcements' ? 'active' : ''}`} onClick={() => setActiveView('announcements')}><Bell size={20} /> Duyurular</button>
-          {isAdmin && (<>
+          {(isAdmin || isSuperAdmin) && (<>
             <button className={`nav-item ${activeView === 'turnstile' ? 'active' : ''}`} onClick={() => setActiveView('turnstile')}><ShieldCheck size={20} /> Turnike Yönetimi</button>
             <button className={`nav-item ${activeView === 'finance' ? 'active' : ''}`} onClick={() => setActiveView('finance')}><CreditCard size={20} /> Finansal</button>
-            <button className={`nav-item ${activeView === 'audit' ? 'active' : ''}`} onClick={() => setActiveView('audit')}><Activity size={20} /> Aktivite Kayıtları</button>
+            {isSuperAdmin && <button className={`nav-item ${activeView === 'audit' ? 'active' : ''}`} onClick={() => setActiveView('audit')}><Activity size={20} /> Aktivite Kayıtları</button>}
           </>)}
         </nav>
         <div className="nav-links" style={{ marginTop: 'auto' }}>
@@ -570,8 +572,8 @@ const App = () => {
                         <button className="btn-action" onClick={() => openModal('workout-view', m)}>🏋️ Antrenman</button>
                         <button className="btn-action" onClick={() => openModal('diet', m)}>🥗 Diyet</button>
                         <button className="btn-action" onClick={() => openModal('measurement', m)}>📐 Ölçüm</button>
-                        <button className="btn-action" onClick={() => openModal('reset-password', m)}><Key size={14} /></button>
-                        {isAdmin && <button className="btn-danger" onClick={() => handleDeleteUser(m)}><Trash2 size={14} /></button>}
+                        {(isAdmin || isSuperAdmin) && <button className="btn-action" onClick={() => openModal('reset-password', m)}><Key size={14} /></button>}
+                        {isSuperAdmin && <button className="btn-danger" onClick={() => handleDeleteUser(m)}><Trash2 size={14} /></button>}
                       </div></td>
                     </tr>
                   ))}</tbody>
@@ -808,6 +810,24 @@ const App = () => {
                         <option value="schedule">Program Değişikliği</option>
                       </select>
                     </div>
+                  </div>
+                )}
+                {modal.type === 'change-role' && (
+                  <div className="form-group">
+                    <label>Yeni Rol Seçin</label>
+                    <select
+                      onChange={e => setFormData({ ...formData, role: e.target.value })}
+                      defaultValue={modal.data?.role || 'member'}
+                      required
+                    >
+                      <option value="member">Üye</option>
+                      <option value="trainer">Eğitmen (Hoca)</option>
+                      <option value="admin">Yönetici (Admin)</option>
+                      {isSuperAdmin && <option value="superadmin">Geliştirici (SuperAdmin)</option>}
+                    </select>
+                    <p style={{ marginTop: '0.8rem', fontSize: '0.85rem', color: 'var(--text-dim)' }}>
+                      <strong>Uyarı:</strong> Rol değişikliği kullanıcının yetkilerini anında etkiler.
+                    </p>
                   </div>
                 )}
                 {modal.type === 'installments' && <MemberInstallmentView userId={modal.data.id} />}
