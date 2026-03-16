@@ -763,7 +763,10 @@ router.post('/admin/add-days', authMiddleware, requireRole('admin', 'trainer'), 
         }
 
         await logAudit('MEMBERSHIP_EXTENDED', req.user.id, user_id, {
-            days, end_date: newEnd.toISOString().split('T')[0], remaining_days: remaining
+            days,
+            old_end_date: current ? current.end_date : 'Yeni Üyelik',
+            new_end_date: newEnd.toISOString().split('T')[0],
+            remaining_days: remaining
         });
 
         res.json({ message: 'Üyelik başarıyla uzatıldı', remaining_days: remaining });
@@ -871,7 +874,13 @@ router.post('/admin/payments', authMiddleware, requireRole('admin', 'trainer'), 
             await db.from('installments').update({ membership_id: newMem.id }).eq('user_id', user_id).is('membership_id', null);
         }
 
-        await logAudit('PAYMENT_COMPLETED', req.user.id, user_id, { amount: paidAmount, package_type });
+        await logAudit('PAYMENT_COMPLETED', req.user.id, user_id, {
+            amount: paidAmount,
+            package_type,
+            old_end_date: current ? current.end_date : 'Yeni Kayıt',
+            new_end_date: newEnd.toISOString().split('T')[0],
+            payment_id: payment.id
+        });
 
         res.json({ message: 'Ödeme ve taksitler başarıyla kaydedildi.', payment });
     } catch (err) {
@@ -928,7 +937,7 @@ router.get('/admin/finance', authMiddleware, requireRole('admin'), async (req, r
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
         const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
 
-        const [currentMonthRes, allMonthsRes, pendingRes] = await Promise.all([
+        const [currentMonthRes, allMonthsRes, pendingRes, installmentsRes] = await Promise.all([
             db.from('payments')
                 .select('amount')
                 .eq('status', 'completed')
@@ -941,8 +950,12 @@ router.get('/admin/finance', authMiddleware, requireRole('admin'), async (req, r
                 .limit(100),
             db.from('memberships')
                 .select('*, users!memberships_user_id_fkey(full_name, email, phone)')
-                .or('remaining_days.lte.7,status.eq.expired,status.eq.grace')
-                .order('remaining_days', { ascending: true })
+                .or('remaining_days.lte.14,status.eq.expired,status.eq.grace')
+                .order('remaining_days', { ascending: true }),
+            db.from('installments')
+                .select('*, users(full_name, email, phone), memberships(remaining_days)')
+                .eq('status', 'pending')
+                .order('due_date', { ascending: true })
         ]);
 
         const currentMonthTotal = (currentMonthRes.data || []).reduce((acc, p) => acc + (p.amount || 0), 0);
@@ -967,7 +980,8 @@ router.get('/admin/finance', authMiddleware, requireRole('admin'), async (req, r
                 avg: currentMonthCount > 0 ? Math.round(currentMonthTotal / currentMonthCount) : 0
             },
             monthlyBreakdown: Object.values(monthlyData),
-            pendingPayments: pendingRes.data || []
+            pendingPayments: pendingRes.data || [],
+            upcomingInstallments: installmentsRes.data || []
         });
     } catch (err) {
         console.error('Finance Error:', err);

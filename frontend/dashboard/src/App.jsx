@@ -26,6 +26,31 @@ const ACTION_LABELS = {
   USER_REGISTERED: '📝 Üye Kaydedildi', USER_UPDATED_BY_ADMIN: '✏️ Admin Güncelledi'
 };
 
+const formatAuditLog = (log) => {
+  const actorName = log.actor?.full_name || 'Sistem';
+  const targetName = log.target?.full_name || 'Bilinmeyen Üye';
+  const details = log.details || {};
+
+  switch (log.action) {
+    case 'MEMBERSHIP_EXTENDED':
+      return `${actorName}, ${targetName} üyesinin süresini ${details.days} gün uzattı. (${details.old_end_date} ➔ ${details.new_end_date})`;
+    case 'PAYMENT_COMPLETED':
+      return `${actorName}, ${targetName} üyesinden ₺${details.amount} ödeme aldı. (${details.package_type})`;
+    case 'ROLE_CHANGED':
+      return `${actorName}, ${targetName} kullanıcısının rolünü ${details.old_role} ➔ ${details.new_role} olarak değiştirdi.`;
+    case 'USER_REGISTERED':
+      return `${actorName}, ${targetName} isimli yeni üyeyi sisteme kaydetti.`;
+    case 'DIET_ASSIGNED':
+      return `${actorName}, ${targetName} üyesine "${details.plan_name}" diyet planını atadı.`;
+    case 'ANNOUNCEMENT_CREATED':
+      return `${actorName} yeni bir duyuru yayınladı: "${details.title}"`;
+    case 'PASSWORD_RESET':
+      return `${actorName}, ${targetName} kullanıcısının şifresini sıfırladı.`;
+    default:
+      return `${actorName} bir işlem gerçekleştirdi: ${log.action}`;
+  }
+};
+
 const HeatmapComponent = ({ data }) => {
   const grid = {};
   let maxVal = 1;
@@ -608,16 +633,68 @@ const App = () => {
             <div className="finance-grid">
               <div className="finance-card"><div className="fc-label">Bu Ayki Toplam Kazanç</div><div className="fc-value" style={{ color: '#34C759' }}>₺{(financeData?.currentMonth?.total || 0).toLocaleString()}</div><div className="fc-sub">{financeData?.currentMonth?.count || 0} işlem</div></div>
               <div className="finance-card"><div className="fc-label">Ortalama Ödeme</div><div className="fc-value">₺{(financeData?.currentMonth?.avg || 0).toLocaleString()}</div><div className="fc-sub">Bu ay ortalaması</div></div>
-              <div className="finance-card"><div className="fc-label">Beklenen Ödemeler</div><div className="fc-value" style={{ color: '#FF9F0A' }}>{(financeData?.pendingPayments || []).length}</div><div className="fc-sub">Süresi dolan / dolacak üyeler</div></div>
+              <div className="finance-card"><div className="fc-label">Beklenen Ödemeler</div><div className="fc-value" style={{ color: '#FF9F0A' }}>{(financeData?.pendingPayments || []).length + (financeData?.upcomingInstallments || []).length}</div><div className="fc-sub">Süresi dolan üyeler ve taksitler</div></div>
             </div>
+
+            {/* Upcoming Installments Section */}
+            <div className="table-container enterprise-table" style={{ marginBottom: '2rem' }}>
+              <div className="section-header">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <h3>Beklenen Taksit Ödemeleri (Gelecek 30 Gün)</h3>
+                  <div className="filter-bar" style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button className={`btn-filter ${filterType === 'all' ? 'active' : ''}`} onClick={() => setFilterType('all')}>Tümü</button>
+                    <button className={`btn-filter ${filterType === 'inst7' ? 'active' : ''}`} onClick={() => setFilterType('inst7')}>7 Gün</button>
+                    <button className={`btn-filter ${filterType === 'inst14' ? 'active' : ''}`} onClick={() => setFilterType('inst14')}>14 Gün</button>
+                  </div>
+                </div>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Üye Bilgisi</th>
+                    <th>Tutar</th>
+                    <th>Vade Tarihi</th>
+                    <th>Kalan Üyelik</th>
+                    <th>Durum</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(financeData?.upcomingInstallments || [])
+                    .filter(inst => {
+                      if (filterType === 'all') return true;
+                      const dueDate = new Date(inst.due_date);
+                      const diff = Math.ceil((dueDate - new Date()) / (1000 * 60 * 60 * 24));
+                      if (filterType === 'inst7') return diff <= 7;
+                      if (filterType === 'inst14') return diff <= 14;
+                      return true;
+                    })
+                    .map(inst => (
+                      <tr key={inst.id}>
+                        <td>
+                          <div style={{ fontWeight: 700 }}>{inst.users?.full_name}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{inst.users?.phone || inst.users?.email}</div>
+                        </td>
+                        <td style={{ fontWeight: 800, color: '#34C759' }}>₺{inst.amount}</td>
+                        <td style={{ fontWeight: 600 }}>{new Date(inst.due_date).toLocaleDateString('tr-TR')}</td>
+                        <td>{inst.memberships?.remaining_days || 0} gün</td>
+                        <td><span className="badge badge-frozen">BEKLEYEN</span></td>
+                      </tr>
+                    ))}
+                  {(financeData?.upcomingInstallments || []).length === 0 && (
+                    <tr><td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-dim)' }}>Yakın zamanda bekleyen taksit ödemesi yok.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
             {(financeData?.pendingPayments || []).length > 0 && (
               <div className="table-container enterprise-table">
-                <div className="section-header"><h3>Beklenen Ödemeler</h3></div>
+                <div className="section-header"><h3>Süresi Dolan/Dolacak Üyelikler</h3></div>
                 <table><thead><tr><th>Üye</th><th>E-posta</th><th>Telefon</th><th>Bitiş Tarihi</th><th>Kalan Gün</th><th>Durum</th></tr></thead>
                   <tbody>{(financeData?.pendingPayments || []).map(p => (
-                    <tr key={p.user_id}><td><strong>{p.full_name}</strong></td><td>{p.email}</td><td>{p.phone || '-'}</td>
-                      <td>{p.end_date}</td><td>{p.remaining_days}</td>
-                      <td><span className={`badge badge-${p.membership_status === 'active' ? 'frozen' : 'expired'}`}>{p.urgency === 'expired' ? 'SÜRESİ DOLMUŞ' : 'DOLMAK ÜZERE'}</span></td>
+                    <tr key={p.user_id}><td><strong>{p.users?.full_name}</strong></td><td>{p.users?.email}</td><td>{p.users?.phone || '-'}</td>
+                      <td>{new Date(p.end_date).toLocaleDateString('tr-TR')}</td><td>{p.remaining_days}</td>
+                      <td><span className={`badge badge-${p.status === 'active' ? 'active' : 'expired'}`}>{p.remaining_days <= 0 ? 'SÜRESİ DOLMUŞ' : 'DOLMAK ÜZERE'}</span></td>
                     </tr>
                   ))}</tbody>
                 </table>
@@ -638,10 +715,8 @@ const App = () => {
                   </div>
                   <div className="audit-info">
                     <div className="audit-action">{ACTION_LABELS[log.action] || log.action}</div>
-                    <div className="audit-meta">
-                      {log.actor ? `${log.actor.full_name} (${log.actor.role})` : 'Sistem'}
-                      {log.target ? ` → ${log.target.full_name}` : ''}
-                      {log.details && typeof log.details === 'object' && Object.keys(log.details).length > 0 && ` • ${JSON.stringify(log.details).slice(0, 80)}`}
+                    <div className="audit-message" style={{ fontSize: '0.9rem', color: 'var(--text-dim)', marginTop: '0.2rem' }}>
+                      {formatAuditLog(log)}
                     </div>
                   </div>
                   <div className="audit-time">{new Date(log.created_at).toLocaleString('tr-TR')}</div>
@@ -715,6 +790,26 @@ const App = () => {
                   </div>
                   <div className="form-group"><label>Açıklama / Notlar</label><textarea placeholder="Opsiyonel detaylar..." style={{ width: '100%', padding: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', minHeight: '80px' }} defaultValue={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}></textarea></div>
                 </>)}
+                {modal.type === 'announcement' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="form-group">
+                      <label>Duyuru Başlığı</label>
+                      <input type="text" placeholder="Örn: Yeni Yıl Kampanyası!" required onChange={e => setFormData({ ...formData, title: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label>Duyuru İçeriği</label>
+                      <textarea placeholder="Duyuru mesajınızı buraya yazın..." style={{ width: '100%', minHeight: '120px' }} required onChange={e => setFormData({ ...formData, body: e.target.value })}></textarea>
+                    </div>
+                    <div className="form-group">
+                      <label>Kategori</label>
+                      <select onChange={e => setFormData({ ...formData, type: e.target.value })} defaultValue="information">
+                        <option value="information">Bilgilendirme</option>
+                        <option value="campaign">Kampanya / Promosyon</option>
+                        <option value="schedule">Program Değişikliği</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
                 {modal.type === 'installments' && <MemberInstallmentView userId={modal.data.id} />}
                 {modal.type === 'nutrition-view' && <StudentNutritionLogs userId={modal.data.id} />}
                 {modal.type === 'workout-view' && <MemberWorkoutView userId={modal.data.id} />}
