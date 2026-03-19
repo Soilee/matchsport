@@ -168,9 +168,24 @@ export default function DashboardScreen() {
                     <Text style={styles.liveCounterText}>Salonda Şu An: {data?.occupancy?.current_count || 0} Kişi Var</Text>
                   </View>
                 </View>
-                <TouchableOpacity style={styles.notificationBtn} onPress={() => setIsAnnouncementsVisible(true)}>
+                <TouchableOpacity style={styles.notificationBtn} onPress={async () => {
+                  setIsAnnouncementsVisible(true);
+                  if (data?.unreadNotifications > 0) {
+                    try {
+                      const { markNotificationsRead } = require('@/services/api');
+                      await markNotificationsRead();
+                      setData(prev => prev ? { ...prev, unreadNotifications: 0 } : null);
+                    } catch (e) { console.error(e); }
+                  }
+                }}>
                   <Ionicons name="notifications-outline" size={24} color={Colors.text} />
-                  {(data?.unreadNotifications || 0) > 0 && <View style={styles.notifBadge} />}
+                  {(data?.unreadNotifications || 0) > 0 && (
+                    <View style={styles.notifBadge}>
+                      <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>
+                        {data.unreadNotifications > 9 ? '9+' : data.unreadNotifications}
+                      </Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               </View>
 
@@ -385,14 +400,17 @@ const styles = StyleSheet.create({
   },
   notifBadge: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    top: 6,
+    right: 6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: Colors.primary,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#1E1E2E',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 2,
   },
   streakCard: {
     backgroundColor: 'rgba(255, 107, 53, 0.1)',

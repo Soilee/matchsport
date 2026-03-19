@@ -42,45 +42,47 @@ export default function HeatmapCard({ data }: Props) {
                 <Text style={styles.title}>Yoğunluk Haritası</Text>
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled={true} contentContainerStyle={{ paddingRight: 20 }}>
-                <View>
-                    {/* Hour labels */}
-                    <View style={styles.row}>
-                        <View style={styles.dayLabel} />
-                        {HOURS.map(h => (
-                            <View key={h} style={styles.hourLabel}>
-                                <Text style={styles.hourText}>{h}:00</Text>
-                            </View>
-                        ))}
-                    </View>
-
-                    {/* Grid */}
-                    {Object.keys(DAY_MAP).map(dayKey => {
-                        const dayIdx = DAY_MAP[dayKey];
-                        return (
-                            <View key={dayKey} style={styles.row}>
-                                <View style={styles.dayLabel}>
-                                    <Text style={styles.dayText}>{DAYS[dayIdx]}</Text>
+            <View style={{ width: '100%', flex: 1, overflow: 'hidden' }}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled={true} contentContainerStyle={{ paddingRight: 20 }}>
+                    <View>
+                        {/* Hour labels */}
+                        <View style={styles.row}>
+                            <View style={styles.dayLabel} />
+                            {HOURS.map(h => (
+                                <View key={h} style={styles.hourLabel}>
+                                    <Text style={styles.hourText}>{h}:00</Text>
                                 </View>
-                                {HOURS.map(h => {
-                                    const val = grid[dayKey]?.[h] || 0;
-                                    return (
-                                        <View
-                                            key={h}
-                                            style={[
-                                                styles.cell,
-                                                { backgroundColor: getHeatColor(val, maxVal) },
-                                            ]}
-                                        >
-                                            <Text style={styles.cellText}>{Math.round(val)}</Text>
-                                        </View>
-                                    );
-                                })}
-                            </View>
-                        );
-                    })}
-                </View>
-            </ScrollView>
+                            ))}
+                        </View>
+
+                        {/* Grid */}
+                        {Object.keys(DAY_MAP).map(dayKey => {
+                            const dayIdx = DAY_MAP[dayKey];
+                            return (
+                                <View key={dayKey} style={styles.row}>
+                                    <View style={styles.dayLabel}>
+                                        <Text style={styles.dayText}>{DAYS[dayIdx]}</Text>
+                                    </View>
+                                    {HOURS.map(h => {
+                                        const val = grid[dayKey]?.[h] || 0;
+                                        return (
+                                            <View
+                                                key={h}
+                                                style={[
+                                                    styles.cell,
+                                                    { backgroundColor: getHeatColor(val, maxVal) },
+                                                ]}
+                                            >
+                                                <Text style={styles.cellText}>{Math.round(val)}</Text>
+                                            </View>
+                                        );
+                                    })}
+                                </View>
+                            );
+                        })}
+                    </View>
+                </ScrollView>
+            </View>
 
             {/* Legend */}
             <View style={styles.legend}>

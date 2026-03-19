@@ -231,14 +231,18 @@ const App = () => {
   };
 
   const handleDeleteUser = async (user) => {
-    const confirmed = confirm(`"${user.full_name}" silinecek.\n\nBu işlem geri alınamaz! İlgili tüm veriler silinecektir:\n• Üyelik bilgileri\n• Ödeme ve taksit kayıtları\n• Beslenme ve diyet logları\n• Ölçüm verileri\n• Antrenman programları\n• Turnike geçiş kayıtları\n• Sistem logları\n\nDevam etmek istiyor musunuz?`);
-    if (!confirmed) return;
+    setConfirmDeleteUser(user);
+  };
+
+  const confirmAndExecuteDelete = async () => {
+    if (!confirmDeleteUser) return;
     try {
-      const res = await fetch(`${API_URL}/admin/users/${user.id}?cascade=true`, { method: 'DELETE', headers });
+      const res = await fetch(`${API_URL}/admin/users/${confirmDeleteUser.id}?cascade=true`, { method: 'DELETE', headers });
       const d = await res.json();
       if (d.error) alert('Hata: ' + d.error);
       else { alert('Kullanıcı ve tüm ilişkili veriler başarıyla silindi'); fetchData(); }
     } catch (e) { alert('Silme hatası'); }
+    setConfirmDeleteUser(null);
   };
 
   const openModal = async (type, data = null) => {
@@ -337,8 +341,6 @@ const App = () => {
       if (activeView === 'audit') fetchAuditLogs();
     } catch (error) { alert('Hata: ' + error.message); }
   };
-
-  const [loginError, setLoginError] = useState('');
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -582,7 +584,7 @@ const App = () => {
                     <tr key={m.id}>
                       <td><div style={{ fontWeight: 700 }}>{m.full_name}</div><div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{m.email}</div></td>
                       <td>
-                        <div style={{ fontWeight: 600 }}>{m.memberships?.[0]?.package_type || 'Standart'}</div>
+                        <div style={{ fontWeight: 600 }}>{formatPackageName(m.memberships?.[0]?.package_type)}</div>
                         {(m.memberships?.[0]?.total_price - m.memberships?.[0]?.amount > 0) &&
                           <div style={{ fontSize: '0.7rem', color: '#FF3B30', fontWeight: 'bold' }}>Borç: ₺{m.memberships[0].total_price - m.memberships[0].amount}</div>
                         }
@@ -915,6 +917,32 @@ const App = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      {confirmDeleteUser && (
+        <div className="modal-overlay" onClick={() => setConfirmDeleteUser(null)}>
+          <div className="modal-content" style={{ maxWidth: '400px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+            <div style={{ marginBottom: '1.5rem', color: '#FF453A' }}>
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+            </div>
+            <h2 style={{ fontSize: '1.3rem', marginBottom: '0.5rem', color: 'white' }}>Silme İşlemini Onayla</h2>
+            <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+              <strong style={{ color: 'white' }}>{confirmDeleteUser.full_name}</strong> adlı kullanıcıyı kalıcı olarak silmek üzeresiniz.
+              <br /><br />
+              Üyelik bilgileri, ödeme kayıtları, beslenme logları, gelişim ölçümleri ve antrenman programları dahil tüm ilişkili veriler <strong style={{ color: '#FF453A' }}>silinecektir</strong>.
+            </p>
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button className="btn-secondary" style={{ flex: 1, padding: '0.8rem' }} onClick={() => setConfirmDeleteUser(null)}>Vazgeç</button>
+              <button className="btn-primary" style={{ flex: 1, padding: '0.8rem', background: '#FF453A', color: 'white' }} onClick={confirmAndExecuteDelete}>Evet, Sil</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
@@ -1031,6 +1059,17 @@ const MemberDietPlanView = ({ userId }) => {
       ))}
     </div>
   );
+};
+
+// Format package type for UI
+const formatPackageName = (packageType) => {
+  if (!packageType) return 'Standart';
+  if (packageType === '1_month') return 'Standart (1 Ay)';
+  if (packageType === '3_months') return 'Standart (3 Ay)';
+  if (packageType === '6_months') return 'Standart (6 Ay)';
+  if (packageType === '12_months') return 'Standart (12 Ay)';
+  if (packageType === '6+6') return 'Standart (6+6)';
+  return 'Standart';
 };
 
 const MemberInstallmentView = ({ userId }) => {
@@ -1202,6 +1241,9 @@ const MemberWorkoutAssignView = ({ userId, onCancel }) => {
 
   return (
     <form className="workout-assign-form" onSubmit={handleSubmit}>
+      <datalist id="exercises-list">
+        {exercises.map(e => <option key={e.id} value={e.name} />)}
+      </datalist>
       <div className="form-group"><label>Program Adı</label><input type="text" value={programName} onChange={e => setProgramName(e.target.value)} required /></div>
       {days.map((day, dIdx) => (
         <div key={dIdx} className="day-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
@@ -1213,14 +1255,11 @@ const MemberWorkoutAssignView = ({ userId, onCancel }) => {
             <button type="button" className="btn-danger" onClick={() => removeDay(dIdx)}>×</button>
           </div>
           {day.exercises.map((ex, eIdx) => (
-            <div key={eIdx} style={{ display: 'grid', gridTemplateColumns: '1fr 50px 80px 60px 30px', gap: '0.4rem', marginBottom: '0.4rem', alignItems: 'center' }}>
-              <select style={{ fontSize: '0.8rem' }} value={ex.exercise_id} onChange={e => updateEx(dIdx, eIdx, 'exercise_id', e.target.value)}>
-                {exercises.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-              </select>
+            <div key={eIdx} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 80px 30px', gap: '0.4rem', marginBottom: '0.4rem', alignItems: 'center' }}>
+              <input type="text" style={{ fontSize: '0.8rem', padding: '0.4rem' }} placeholder="Hareket Adı" value={ex.exercise_id || ''} onChange={e => updateEx(dIdx, eIdx, 'exercise_id', e.target.value)} list="exercises-list" />
               <input type="number" placeholder="Set" value={ex.sets} onChange={e => updateEx(dIdx, eIdx, 'sets', e.target.value)} />
-              <input type="text" placeholder="Rps" value={ex.reps} onChange={e => updateEx(dIdx, eIdx, 'reps', e.target.value)} />
-              <input type="number" placeholder="kg" value={ex.weight_kg} onChange={e => updateEx(dIdx, eIdx, 'weight_kg', e.target.value)} />
-              <button type="button" style={{ color: '#FF3B30' }} onClick={() => removeEx(dIdx, eIdx)}>×</button>
+              <input type="text" placeholder="Reps" value={ex.reps} onChange={e => updateEx(dIdx, eIdx, 'reps', e.target.value)} />
+              <button type="button" style={{ color: '#FF3B30', fontWeight: 'bold' }} onClick={() => removeEx(dIdx, eIdx)}>×</button>
             </div>
           ))}
           <button type="button" className="btn-action" style={{ fontSize: '0.75rem' }} onClick={() => addEx(dIdx)}>+ Hareket Ekle</button>

@@ -185,6 +185,18 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             .eq('status', 'active')
             .lte('end_date', todayStr);
 
+        // Heatmap frozen update logic (Updates every Sunday night 02:00 -> Monday 02:00)
+        let now = new Date();
+        let prevMonday = new Date(now);
+        let diff = (now.getDay() + 6) % 7; // Days since Monday
+        prevMonday.setDate(now.getDate() - diff);
+        prevMonday.setHours(2, 0, 0, 0);
+        if (now < prevMonday) {
+            prevMonday.setDate(prevMonday.getDate() - 7);
+        }
+        let endHeatmapDate = prevMonday.toISOString();
+        let startHeatmapDate = new Date(prevMonday.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
         const [
             userRes,
             membershipRes,
@@ -204,8 +216,11 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             db.from('users').select('id, full_name, nickname, email, phone, role, profile_photo_url, kvkk_mask').eq('id', userId).single(),
             db.from('memberships').select('*').eq('user_id', userId).order('end_date', { ascending: false }).limit(1).maybeSingle(),
             db.from('gym_occupancy').select('current_count, max_capacity').order('recorded_at', { ascending: false }).limit(1).maybeSingle(),
-            // Only fetch last 500 rows for heatmap to prevent RAM issues
-            db.from('gym_occupancy').select('hour_of_day, day_of_week, avg_count:current_count').order('recorded_at', { ascending: false }).limit(500),
+            db.from('gym_occupancy')
+                .select('hour_of_day, day_of_week, current_count')
+                .gte('recorded_at', startHeatmapDate)
+                .lt('recorded_at', endHeatmapDate)
+                .limit(2000),
             db.from('workout_programs').select('*').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle(),
             db.from('pr_records').select('*, exercises(name, muscle_group)').eq('user_id', userId).order('achieved_at', { ascending: false }).limit(5),
             db.from('body_measurements').select('*').eq('user_id', userId).order('measured_at', { ascending: false }).limit(10),
@@ -335,6 +350,20 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
         // Get live occupancy from check_ins
         const { count: liveOccupancy } = await db.from('check_ins').select('id', { count: 'exact', head: true }).is('check_out_time', null);
 
+        // Format heatmap data
+        const rawHeatmap = heatmapRes.data || [];
+        const heatMapAcc = {};
+        for (let r of rawHeatmap) {
+            const key = `${r.day_of_week}_${r.hour_of_day}`;
+            if (!heatMapAcc[key]) heatMapAcc[key] = { sum: 0, count: 0 };
+            heatMapAcc[key].sum += r.current_count || 0;
+            heatMapAcc[key].count++;
+        }
+        const formattedHeatmap = Object.keys(heatMapAcc).map(k => {
+            const [day, hour] = k.split('_');
+            return { day_of_week: day, hour_of_day: parseInt(hour), avg_count: Math.round(heatMapAcc[k].sum / heatMapAcc[k].count) };
+        });
+
         res.json({
             user,
             membership,
@@ -343,7 +372,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
                 max_capacity: occRes.data?.max_capacity || 100
             },
             liveOccupancy: liveOccupancy || 0,
-            heatmap: heatmapRes.data || [],
+            heatmap: formattedHeatmap,
             todayWorkout,
             prRecords: prRes.data || [],
             measurements: (measurementRes.data || []).reverse(),
@@ -981,64 +1010,15 @@ router.post('/admin/payments', authMiddleware, requireRole('admin', 'trainer'), 
             }
         }
 
-        // 3. Update/Extend Membership
-        const { data: current } = await db.from('memberships').select('*').eq('user_id', user_id).order('end_date', { ascending: false }).limit(1).maybeSingle();
-
-        let daysToAdd = 30;
-        if (package_type === '3_months') daysToAdd = 90;
-        else if (package_type === '6_months') daysToAdd = 180;
-        else if (package_type === '12_months') daysToAdd = 365;
-        else if (package_type === '6+6') daysToAdd = 365;
-
-        let newEnd = new Date();
-        if (current && new Date(current.end_date) > new Date()) {
-            newEnd = new Date(current.end_date);
-        }
-        newEnd.setDate(newEnd.getDate() + daysToAdd);
-
-        const diffTime = Math.max(0, newEnd - new Date());
-        const remainingDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        if (current) {
-            // Calculate total_days from start_date to new end_date
-            const startDate = new Date(current.start_date || current.created_at);
-            const totalDays = Math.ceil((newEnd - startDate) / (1000 * 60 * 60 * 24));
-            await db.from('memberships').update({
-                end_date: newEnd.toISOString().split('T')[0],
-                status: 'active',
-                remaining_days: remainingDays,
-                total_days: totalDays,
-                package_type: package_type || current.package_type,
-                amount: (current.amount || 0) + paidAmount
-            }).eq('id', current.id);
-
-            // Link installments to this membership
-            await db.from('installments').update({ membership_id: current.id }).eq('user_id', user_id).is('membership_id', null);
-        } else {
-            const { data: newMem } = await db.from('memberships').insert({
-                user_id,
-                start_date: new Date().toISOString().split('T')[0],
-                end_date: newEnd.toISOString().split('T')[0],
-                total_days: daysToAdd,
-                remaining_days: remainingDays,
-                status: 'active',
-                package_type: package_type || 'Standart',
-                amount: paidAmount
-            }).select().single();
-
-            // Link installments to this membership
-            await db.from('installments').update({ membership_id: newMem.id }).eq('user_id', user_id).is('membership_id', null);
+        // 3. Link installments to the membership updated/created by the DB trigger
+        if (payment.membership_id) {
+            await db.from('installments')
+                .update({ membership_id: payment.membership_id })
+                .eq('user_id', user_id)
+                .is('membership_id', null);
         }
 
-        await logAudit('PAYMENT_COMPLETED', req.user.id, user_id, {
-            amount: paidAmount,
-            package_type,
-            old_end_date: current ? current.end_date : 'Yeni Kayıt',
-            new_end_date: newEnd.toISOString().split('T')[0],
-            payment_id: payment.id
-        });
-
-        res.json({ message: 'Ödeme ve taksitler başarıyla kaydedildi.', payment });
+        res.json({ message: 'Ödeme alındı ve üyelik güncellendi', payment });
     } catch (err) {
         console.error('Payment Error:', err);
         res.status(500).json({ error: 'Ödeme kaydı başarısız' });
@@ -1335,6 +1315,15 @@ router.get('/announcements', authMiddleware, async (req, res) => {
         res.json(data || []);
     } catch (err) {
         res.status(500).json({ error: 'Yüklenemedi' });
+    }
+});
+
+router.post('/notifications/read', authMiddleware, async (req, res) => {
+    try {
+        await getDb().from('notifications').update({ is_read: true }).eq('user_id', req.user.id).eq('is_read', false);
+        res.json({ message: 'Bildirimler okundu olarak işaretlendi' });
+    } catch (err) {
+        res.status(500).json({ error: 'İşlem başarısız' });
     }
 });
 
@@ -1731,6 +1720,20 @@ router.post('/admin/assign-workout', authMiddleware, requireRole('admin', 'train
             if (dError) throw dError;
 
             if (day.exercises && day.exercises.length > 0) {
+                // Support free text exercise names instead of forcing predefined UUIDs
+                for (let ex of day.exercises) {
+                    if (ex.exercise_id && !ex.exercise_id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)) {
+                        // Not a UUID -> it's a typed name
+                        let { data: existing } = await db.from('exercises').select('id').ilike('name', ex.exercise_id).maybeSingle();
+                        if (existing) {
+                            ex.exercise_id = existing.id;
+                        } else {
+                            let { data: newEx } = await db.from('exercises').insert({ name: ex.exercise_id, muscle_group: day.muscle_group || 'Genel' }).select().single();
+                            if (newEx) ex.exercise_id = newEx.id;
+                        }
+                    }
+                }
+
                 const exercisesToInsert = day.exercises.map(ex => ({
                     day_id: dayRes.id,
                     exercise_id: ex.exercise_id,

@@ -163,6 +163,11 @@ export const addNutritionLog = async (data: { food_item_id: string; quantity_g: 
     return res.data;
 };
 
+export const markNotificationsRead = async () => {
+    const res = await api.post('/notifications/read');
+    return res.data;
+};
+
 export const getDailyNutrition = async () => {
     const res = await api.get('/nutrition/daily');
     return res.data;
