@@ -128,6 +128,8 @@ const App = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [turnstileLogs, setTurnstileLogs] = useState([]);
   const [turnstileConfig, setTurnstileConfig] = useState({ enabled: false, message: '' });
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState(null);
+  const [loginError, setLoginError] = useState('');
 
   const token = localStorage.getItem('token');
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
