@@ -1666,4 +1666,81 @@ router.post('/admin/assign-workout', authMiddleware, requireRole('admin', 'train
     }
 });
 
+
+// =================== TASKS ===================
+
+// Get current user's tasks
+router.get('/tasks', authMiddleware, async (req, res) => {
+    try {
+        const db = getDb();
+        const { data, error } = await db.from('tasks').select('*').eq('user_id', req.user.id).order('created_at', { ascending: false });
+        if (error) {
+            if (error.code === 'PGRST116' || error.message.includes('relation "public.tasks" does not exist')) {
+                return res.json([]);
+            }
+            throw error;
+        }
+        res.json(data || []);
+    } catch (e) {
+        console.error('tasks error', e);
+        res.status(500).json({ error: 'Görevler alınamadı' });
+    }
+});
+
+// Complete a task
+router.post('/tasks/:id/complete', authMiddleware, async (req, res) => {
+    try {
+        const db = getDb();
+        const { error } = await db.from('tasks').update({ is_completed: true }).eq('id', req.params.id).eq('user_id', req.user.id);
+        if (error) {
+            if (error.message.includes('relation "public.tasks" does not exist')) {
+                return res.status(404).json({ error: 'Görev sistemi henüz yapılandırılmadı' });
+            }
+            throw error;
+        }
+        res.json({ success: true });
+    } catch (e) {
+        console.error('completeTask error', e);
+        res.status(500).json({ error: 'Görev tamamlanamadı' });
+    }
+});
+
+// Admin: Get all tasks (pool)
+router.get('/admin/tasks', authMiddleware, requireRole(['admin', 'superadmin']), async (req, res) => {
+    try {
+        const db = getDb();
+        const { data, error } = await db.from('tasks').select('*').order('created_at', { ascending: false });
+        if (error) {
+            if (error.message.includes('relation "public.tasks" does not exist')) {
+                return res.json([]);
+            }
+            throw error;
+        }
+        res.json(data || []);
+    } catch (e) {
+        console.error('admin tasks error', e);
+        res.status(500).json({ error: 'Görevler alınamadı' });
+    }
+});
+
+// Admin: Create task
+router.post('/admin/tasks', authMiddleware, requireRole(['admin', 'superadmin']), async (req, res) => {
+    try {
+        const db = getDb();
+        const { title, user_id, category, points } = req.body;
+        const { data, error } = await db.from('tasks').insert({
+            title,
+            user_id: user_id || null, // Optional assignment
+            category,
+            points
+        }).select().single();
+        if (error) throw error;
+        res.json(data);
+    } catch (e) {
+        console.error('createTask error', e);
+        res.status(500).json({ error: 'Görev oluşturulamadı' });
+    }
+});
+
 module.exports = router;
+

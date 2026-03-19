@@ -624,10 +624,6 @@ const App = () => {
                   <td><span className="badge badge-active">AKTİF</span></td>
                   <td><div style={{ display: 'flex', gap: '0.4rem' }}>
                     <button className="btn-action" style={{ color: '#007AFF' }} onClick={() => openModal('user-logs', t)}>📂 Aktivite</button>
-                    {(isAdmin || isSuperAdmin) && (<>
-                      <button className="btn-action" onClick={() => openModal('diet', t)}>Diyet</button>
-                      <button className="btn-action" onClick={() => openModal('nutrition-view', t)}>Beslenme</button>
-                    </>)}
                     {isAdmin && <button className="btn-action" style={{ color: '#007AFF' }} onClick={() => openModal('change-role', t)}>Rol</button>}
                     {isAdmin && <button className="btn-danger" onClick={() => handleDeleteUser(t)}><Trash2 size={14} /></button>}
                   </div></td>
