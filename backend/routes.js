@@ -191,7 +191,8 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             leaderboardStrRes,
             badgeRes,
             qrRes,
-            notifRes
+            notificationsRes,
+            installmentsRes
         ] = await Promise.all([
             db.from('users').select('id, full_name, nickname, email, phone, role, profile_photo_url, kvkk_mask').eq('id', userId).single(),
             db.from('memberships').select('*').eq('user_id', userId).order('end_date', { ascending: false }).limit(1).maybeSingle(),
@@ -205,13 +206,14 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             db.from('leaderboard').select('*, users(full_name, nickname, profile_photo_url, kvkk_mask)').eq('category', 'attendance').order('monthly_visits', { ascending: false }).limit(5),
             db.from('leaderboard').select('*, users(full_name, nickname, profile_photo_url, kvkk_mask)').eq('category', 'strength_bench').order('monthly_visits', { ascending: false }).limit(5),
             db.from('user_badges').select('*, badges(*)').eq('user_id', userId),
-            db.from('notifications').select('id', { count: 'exact' }).eq('user_id', userId).eq('is_read', false),
+            db.from('qr_codes').select('qr_token').eq('user_id', userId).eq('is_active', true).maybeSingle(),
+            db.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_read', false),
             db.from('installments').select('*').eq('user_id', userId).order('due_date', { ascending: true })
         ]);
 
         const user = userRes.data;
         let membership = membershipRes.data;
-        const installments = installmentRes.data || [];
+        const installments = installmentsRes.data || [];
 
         if (membership && membership.end_date) {
             const todayAtMidnight = new Date();
@@ -335,7 +337,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             leaderboard: { attendance: attendanceLeaderboard, strength: strengthLeaderboard },
             badges: badgeRes.data || [],
             qrCode: qrRes.data?.qr_token || null,
-            unreadNotifications: notifRes.count || 0,
+            unreadNotifications: notificationsRes.count || 0,
             installments,
             adminStats,
             trainerStats,
@@ -1468,7 +1470,7 @@ router.post('/nutrition/ai-generate-diet', authMiddleware, async (req, res) => {
         }
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
         const prompt = `Sen bir uzman diyetisyensin. Kullanıcının şu hedefine uygun bir diyet planı hazırla ve bunu SADECE bir JSON formatında döndür. Hiçbir ekstra açıklama yazma.
 İstem: "${prompt_text}"
