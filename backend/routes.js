@@ -791,8 +791,9 @@ router.delete('/admin/users/:id', authMiddleware, requireRole('admin'), async (r
             } catch (e) { /* ignore */ }
             // Delete memberships last (they may have FK references)
             try { await db.from('memberships').delete().eq('user_id', id); } catch (e) { }
-            // Delete audit logs where this user is the target
-            try { await db.from('audit_logs').delete().eq('target_user_id', id); } catch (e) { }
+            // Delete audit logs where this user is the target or admin
+            try { await db.from('audit_logs').delete().eq('target_id', id); } catch (e) { }
+            try { await db.from('audit_logs').delete().eq('admin_id', id); } catch (e) { }
         }
 
         const { error } = await db.from('users').delete().eq('id', id);
