@@ -177,6 +177,13 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
     try {
         const db = getDb();
         const userId = req.user.id;
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        // Auto-expire memberships built into the fetch
+        await db.from('memberships')
+            .update({ status: 'expired' })
+            .eq('status', 'active')
+            .lte('end_date', todayStr);
 
         const [
             userRes,
@@ -274,6 +281,13 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
         let adminStats = null;
         if (user && (user.role === 'admin' || user.role === 'superadmin')) {
             const todayStr = new Date().toISOString().split('T')[0];
+
+            // Auto-expire memberships for users with 0 or fewer days remaining
+            await db.from('memberships')
+                .update({ status: 'expired' })
+                .eq('status', 'active')
+                .lte('end_date', todayStr);
+
             const in1DayStr = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
             const in7DaysStr = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
             const in14DaysStr = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -700,8 +714,17 @@ router.post('/measurements', authMiddleware, async (req, res) => {
 
 router.get('/admin/users', authMiddleware, requireRole('admin', 'trainer'), async (req, res) => {
     try {
+        const db = getDb();
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        // Auto-expire memberships for users with 0 or fewer days remaining
+        await db.from('memberships')
+            .update({ status: 'expired' })
+            .eq('status', 'active')
+            .lte('end_date', todayStr);
+
         const { role } = req.query;
-        let query = getDb().from('users').select('*');
+        let query = db.from('users').select('*');
         if (role) query = query.eq('role', role);
         const { data } = await query.order('full_name');
         res.json(data || []);
@@ -756,7 +779,8 @@ router.delete('/admin/users/:id', authMiddleware, requireRole('admin'), async (r
             return res.status(403).json({ error: 'Admin silmek için SuperAdmin yetkisi gerekli' });
         }
 
-        await logAudit('USER_DELETED', req.user.id, id, {
+        await logAudit('USER_DELETED', req.user.id, null, {
+            deleted_user_id: id,
             deleted_user: userToDelete.full_name,
             deleted_email: userToDelete.email,
             deleted_role: userToDelete.role,
