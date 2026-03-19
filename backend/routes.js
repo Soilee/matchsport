@@ -1269,6 +1269,15 @@ router.post('/admin/reset-password', authMiddleware, requireRole('admin'), async
 
 // =================== NUTRITION & MACROS ===================
 
+router.get('/exercises', authMiddleware, async (req, res) => {
+    try {
+        const { data } = await getDb().from('exercises').select('*').order('name');
+        res.json(data || []);
+    } catch (err) {
+        res.status(500).json({ error: 'Egzersiz listesi yüklenemedi' });
+    }
+});
+
 router.get('/foods', authMiddleware, async (req, res) => {
     try {
         const { data } = await getDb().from('food_items').select('*').order('name');
@@ -1580,6 +1589,80 @@ router.get('/admin/user-installments/:userId', authMiddleware, async (req, res) 
         res.json(data || []);
     } catch (err) {
         res.status(500).json({ error: 'Yüklenemedi' });
+    }
+});
+
+router.get('/admin/user-logs/:id', authMiddleware, requireRole('admin', 'trainer'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const db = getDb();
+
+        const [checkIns, nutrition, audits] = await Promise.all([
+            db.from('turnstile_logs').select('*').eq('user_id', id).order('check_in_time', { ascending: false }).limit(20),
+            db.from('nutrition_logs').select('*, food_items(name)').eq('user_id', id).order('log_date', { ascending: false }).limit(20),
+            db.from('audit_logs').select('*').eq('target_id', id).order('created_at', { ascending: false }).limit(20)
+        ]);
+
+        const combined = [
+            ...(checkIns.data || []).map(l => ({ type: 'check_in', date: l.check_in_time, details: l })),
+            ...(nutrition.data || []).map(l => ({ type: 'nutrition', date: l.log_date, details: l })),
+            ...(audits.data || []).map(l => ({ type: 'audit', date: l.created_at, details: l }))
+        ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        res.json(combined);
+    } catch (err) {
+        console.error('User Logs Error:', err);
+        res.status(500).json({ error: 'Kayıtlar yüklenemedi' });
+    }
+});
+
+router.post('/admin/assign-workout', authMiddleware, requireRole('admin', 'trainer'), async (req, res) => {
+    try {
+        const { user_id, program_name, start_date, end_date, days } = req.body;
+        const db = getDb();
+
+        // 1. Deactivate old programs
+        await db.from('workout_programs').update({ is_active: false }).eq('user_id', user_id);
+
+        // 2. Create new program
+        const { data: program, error: pError } = await db.from('workout_programs').insert({
+            user_id,
+            program_name: program_name || 'Özel Program',
+            start_date: start_date || new Date().toISOString().split('T')[0],
+            end_date: end_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            is_active: true
+        }).select().single();
+
+        if (pError) throw pError;
+
+        // 3. Create days and exercises
+        for (const day of (days || [])) {
+            const { data: dayRes, error: dError } = await db.from('workout_days').insert({
+                program_id: program.id,
+                day_of_week: day.day_of_week,
+                muscle_group: day.muscle_group
+            }).select().single();
+
+            if (dError) throw dError;
+
+            if (day.exercises && day.exercises.length > 0) {
+                const exercisesToInsert = day.exercises.map(ex => ({
+                    day_id: dayRes.id,
+                    exercise_id: ex.exercise_id,
+                    sets: parseInt(ex.sets || 0),
+                    reps: ex.reps || '12',
+                    weight_kg: parseFloat(ex.weight_kg || 0),
+                    notes: ex.notes || ''
+                }));
+                await db.from('workout_exercises').insert(exercisesToInsert);
+            }
+        }
+
+        await logAudit('WORKOUT_ASSIGNED', req.user.id, user_id, { program_name });
+        res.json({ message: 'Antrenman programı başarıyla atandı', program });
+    } catch (err) {
+        console.error('Workout Assign Error:', err);
+        res.status(500).json({ error: 'Program atanamadı' });
     }
 });
 

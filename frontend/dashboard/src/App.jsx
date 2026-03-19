@@ -17,6 +17,16 @@ function getHeatColor(value, max) {
   return `rgba(239, 68, 68, ${0.5 + ratio * 0.5})`;
 }
 
+function calculateRemainingDays(endDate) {
+  if (!endDate) return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  if (isNaN(end.getTime())) return 0;
+  const diff = end.getTime() - today.getTime();
+  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+}
+
 const ACTION_LABELS = {
   PAYMENT_COMPLETED: '💰 Ödeme Onaylandı', USER_CREATED: '👤 Kullanıcı Oluşturuldu',
   USER_UPDATED: '✏️ Kullanıcı Güncellendi', USER_DELETED: '🗑️ Kullanıcı Silindi',
@@ -309,6 +319,17 @@ const App = () => {
       } else if (modal.type === 'change-role') {
         const res = await fetch(`${API_URL}/admin/users/${modal.data.id}/role`, { method: 'PUT', headers, body: JSON.stringify({ role: formData.role }) });
         const d = await res.json(); if (d.error) throw new Error(d.error);
+      } else if (modal.type === 'workout-assign') {
+        const res = await fetch(`${API_URL}/admin/assign-workout`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            user_id: modal.data.id,
+            program_name: formData.program_name,
+            days: formData.days || []
+          })
+        });
+        const d = await res.json(); if (d.error) throw new Error(d.error);
       }
       alert('İşlem Başarılı!'); closeModal(); fetchData();
       if (activeView === 'finance') fetchFinance();
@@ -536,18 +557,23 @@ const App = () => {
                     if (!matchesSearch) return false;
 
                     const membership = m.memberships?.[0];
+                    const remainingDays = calculateRemainingDays(membership?.end_date);
                     if (filterType === 'debt') {
                       const debt = (membership?.total_price || 0) - (membership?.amount || 0);
                       return debt > 0;
                     }
-                    if (filterType === 'exp1') return membership?.remaining_days <= 1;
-                    if (filterType === 'exp7') return membership?.remaining_days <= 7;
-                    if (filterType === 'exp14') return membership?.remaining_days <= 14;
+                    if (filterType === 'exp1') return remainingDays <= 1;
+                    if (filterType === 'exp7') return remainingDays <= 7;
+                    if (filterType === 'exp14') return remainingDays <= 14;
                     return true;
                   })
                   .sort((a, b) => {
-                    const valA = a.memberships?.[0]?.[sortConfig.key] || 0;
-                    const valB = b.memberships?.[0]?.[sortConfig.key] || 0;
+                    const valA = sortConfig.key === 'remaining_days'
+                      ? calculateRemainingDays(a.memberships?.[0]?.end_date)
+                      : (a.memberships?.[0]?.[sortConfig.key] || 0);
+                    const valB = sortConfig.key === 'remaining_days'
+                      ? calculateRemainingDays(b.memberships?.[0]?.end_date)
+                      : (b.memberships?.[0]?.[sortConfig.key] || 0);
                     if (sortConfig.direction === 'asc') return valA - valB;
                     return valB - valA;
                   })
@@ -560,7 +586,7 @@ const App = () => {
                           <div style={{ fontSize: '0.7rem', color: '#FF3B30', fontWeight: 'bold' }}>Borç: ₺{m.memberships[0].total_price - m.memberships[0].amount}</div>
                         }
                       </td>
-                      <td>{m.memberships?.[0]?.remaining_days || 0} <span style={{ color: 'var(--text-dim)', fontSize: '0.7rem' }}>gün</span></td>
+                      <td>{calculateRemainingDays(m.memberships?.[0]?.end_date)} <span style={{ color: 'var(--text-dim)', fontSize: '0.7rem' }}>gün</span></td>
                       <td><span className={`badge badge-${m.memberships?.[0]?.status || 'expired'}`}>{m.memberships?.[0]?.status === 'active' ? 'AKTİF' : m.memberships?.[0]?.status === 'frozen' ? 'DONDURULDU' : 'BİTTİ'}</span></td>
                       <td><div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
                         <button className="btn-action" style={{ color: '#FF9F0A' }} onClick={() => handleStatusToggle(m.id, m.memberships?.[0]?.status)}>{m.memberships?.[0]?.status === 'frozen' ? 'Aktif' : 'Dondur'}</button>
@@ -568,9 +594,12 @@ const App = () => {
                         <button className="btn-action" style={{ color: '#007AFF' }} onClick={() => openModal('installments', m)}>📊 Taksitler</button>
                         <button className="btn-action" onClick={() => openModal('add-days', m)}>📅 Gün Ekle</button>
                         <button className="btn-action" style={{ color: '#FF3B30' }} onClick={() => { setModal({ show: true, type: 'add-days', data: m }); setFormData({ actionType: 'subtract' }); }}>➖ Çıkar</button>
-                        <button className="btn-action" onClick={() => openModal('nutrition-view', m)}>🍎 Beslenme</button>
-                        <button className="btn-action" onClick={() => openModal('workout-view', m)}>🏋️ Antrenman</button>
-                        <button className="btn-action" onClick={() => openModal('diet', m)}>🥗 Diyet</button>
+                        <button className="btn-action" style={{ color: '#007AFF' }} onClick={() => openModal('user-logs', m)}>📂 Aktivite</button>
+                        {(isAdmin || isSuperAdmin) && (<>
+                          <button className="btn-action" onClick={() => openModal('nutrition-view', m)}>🍎 Beslenme</button>
+                          <button className="btn-action" onClick={() => openModal('diet', m)}>🥗 Diyet</button>
+                        </>)}
+                        <button className="btn-action" onClick={() => openModal('workout-assign', m)}>🏋️ Antrenman</button>
                         <button className="btn-action" onClick={() => openModal('measurement', m)}>📐 Ölçüm</button>
                         {(isAdmin || isSuperAdmin) && <button className="btn-action" onClick={() => openModal('reset-password', m)}><Key size={14} /></button>}
                         {isSuperAdmin && <button className="btn-danger" onClick={() => handleDeleteUser(m)}><Trash2 size={14} /></button>}
@@ -594,8 +623,11 @@ const App = () => {
                   <td><strong>{t.full_name}</strong></td><td>{t.email}</td><td>{t.phone || '-'}</td>
                   <td><span className="badge badge-active">AKTİF</span></td>
                   <td><div style={{ display: 'flex', gap: '0.4rem' }}>
-                    <button className="btn-action" onClick={() => openModal('diet', t)}>Diyet</button>
-                    <button className="btn-action" onClick={() => openModal('nutrition-view', t)}>Beslenme</button>
+                    <button className="btn-action" style={{ color: '#007AFF' }} onClick={() => openModal('user-logs', t)}>📂 Aktivite</button>
+                    {(isAdmin || isSuperAdmin) && (<>
+                      <button className="btn-action" onClick={() => openModal('diet', t)}>Diyet</button>
+                      <button className="btn-action" onClick={() => openModal('nutrition-view', t)}>Beslenme</button>
+                    </>)}
                     {isAdmin && <button className="btn-action" style={{ color: '#007AFF' }} onClick={() => openModal('change-role', t)}>Rol</button>}
                     {isAdmin && <button className="btn-danger" onClick={() => handleDeleteUser(t)}><Trash2 size={14} /></button>}
                   </div></td>
@@ -791,6 +823,23 @@ const App = () => {
                     <div className="form-group"><label>Yağ (g)</label><input type="number" placeholder="70" defaultValue={formData.fat_g} onChange={e => setFormData({ ...formData, fat_g: e.target.value })} /></div>
                   </div>
                   <div className="form-group"><label>Açıklama / Notlar</label><textarea placeholder="Opsiyonel detaylar..." style={{ width: '100%', padding: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', minHeight: '80px' }} defaultValue={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}></textarea></div>
+                  <div className="form-group">
+                    <label>Öğünler (JSON formatında)</label>
+                    <textarea
+                      placeholder='[{"name": "Sabah", "items": ["3 yumurta"]}]'
+                      style={{ width: '100%', padding: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', minHeight: '150px', fontFamily: 'monospace', fontSize: '0.8rem' }}
+                      value={formData.meals ? JSON.stringify(formData.meals, null, 2) : ''}
+                      onChange={e => {
+                        try {
+                          const parsed = JSON.parse(e.target.value);
+                          setFormData({ ...formData, meals: parsed });
+                        } catch (err) {
+                          // Allow typing, but maybe show error if invalid
+                          setFormData({ ...formData, _raw_meals: e.target.value });
+                        }
+                      }}
+                    ></textarea>
+                  </div>
                 </>)}
                 {modal.type === 'announcement' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -833,7 +882,9 @@ const App = () => {
                 {modal.type === 'installments' && <MemberInstallmentView userId={modal.data.id} />}
                 {modal.type === 'nutrition-view' && <StudentNutritionLogs userId={modal.data.id} />}
                 {modal.type === 'workout-view' && <MemberWorkoutView userId={modal.data.id} />}
+                {modal.type === 'workout-assign' && <MemberWorkoutAssignView userId={modal.data.id} onCancel={closeModal} />}
                 {modal.type === 'diet-view' && <MemberDietPlanView userId={modal.data.id} />}
+                {modal.type === 'user-logs' && <MemberLogsView userId={modal.data.id} />}
 
                 {(modal.type === 'add-trainer' || modal.type === 'add-member') && (<>
                   <div className="form-group"><label>Tam Adı</label><input type="text" placeholder="Ad Soyad" required onChange={e => setFormData({ ...formData, full_name: e.target.value })} /></div>
@@ -1028,5 +1079,136 @@ const StatCard = ({ icon, label, value, sub, variant, onClick }) => (
     {sub && <div className="stat-sub">{sub}</div>}
   </div>
 );
+
+const MemberLogsView = ({ userId }) => {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_URL}/admin/user-logs/${userId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        setLogs(await res.json());
+      } catch (e) { console.error(e); } finally { setLoading(false); }
+    };
+    fetchLogs();
+  }, [userId]);
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '2rem' }}><Activity color="var(--primary)" /></div>;
+  if (logs.length === 0) return <p style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '2rem' }}>Henüz kayıt bulunamadı.</p>;
+
+  return (
+    <div className="audit-list" style={{ marginTop: '1rem' }}>
+      {logs.map((log, i) => (
+        <div key={i} className="audit-item" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', padding: '1rem 0' }}>
+          <div className="audit-icon" style={{
+            background: log.type === 'check_in' ? 'rgba(52,199,89,0.1)' : log.type === 'nutrition' ? 'rgba(255,159,10,0.1)' : 'rgba(0,122,255,0.1)',
+            color: log.type === 'check_in' ? '#34C759' : log.type === 'nutrition' ? '#FF9F0A' : '#007AFF'
+          }}>
+            {log.type === 'check_in' ? '👟' : log.type === 'nutrition' ? '🍎' : '📝'}
+          </div>
+          <div className="audit-info">
+            <div className="audit-action">
+              {log.type === 'check_in' ? 'Turnike Girişi' : log.type === 'nutrition' ? `Öğün: ${log.details.meal_type || 'Beslenme'}` : (ACTION_LABELS[log.details.action] || log.details.action)}
+            </div>
+            <div className="audit-message" style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>
+              {log.type === 'check_in' && `Salona giriş yaptı. Bitiş: ${log.details.check_out_time ? new Date(log.details.check_out_time).toLocaleTimeString() : 'İçeride'}`}
+              {log.type === 'nutrition' && `${log.details.food_items?.name || log.details.raw_text || 'Detay yok'} — ${log.details.calories} kcal`}
+              {log.type === 'audit' && formatAuditLog(log.details)}
+            </div>
+          </div>
+          <div className="audit-time" style={{ fontSize: '0.75rem' }}>{new Date(log.date).toLocaleString('tr-TR')}</div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const MemberWorkoutAssignView = ({ userId, onCancel }) => {
+  const [exercises, setExercises] = useState([]);
+  const [programName, setProgramName] = useState('Yeni Antrenman Programı');
+  const [days, setDays] = useState([{ day_of_week: 'mon', muscle_group: '', exercises: [] }]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_URL}/exercises`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
+      .then(r => r.json()).then(setExercises).catch(console.error);
+  }, []);
+
+  const addDay = () => setDays([...days, { day_of_week: 'mon', muscle_group: '', exercises: [] }]);
+  const removeDay = (idx) => setDays(days.filter((_, i) => i !== idx));
+
+  const addEx = (dayIdx) => {
+    const newDays = [...days];
+    newDays[dayIdx].exercises.push({ exercise_id: exercises[0]?.id || '', sets: 3, reps: '12', weight_kg: 0 });
+    setDays(newDays);
+  };
+
+  const updateDay = (idx, field, val) => {
+    const newDays = [...days];
+    newDays[idx][field] = val;
+    setDays(newDays);
+  };
+
+  const updateEx = (dayIdx, exIdx, field, val) => {
+    const newDays = [...days];
+    newDays[dayIdx].exercises[exIdx][field] = val;
+    setDays(newDays);
+  };
+
+  const removeEx = (dayIdx, exIdx) => {
+    const newDays = [...days];
+    newDays[dayIdx].exercises = newDays[dayIdx].exercises.filter((_, i) => i !== exIdx);
+    setDays(newDays);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/assign-workout`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, program_name: programName, days })
+      });
+      if (res.ok) { alert('Program başarıyla atandı!'); onCancel(); }
+      else { const d = await res.json(); alert('Hata: ' + d.error); }
+    } catch (e) { alert('Hata: ' + e.message); } finally { setLoading(false); }
+  };
+
+  return (
+    <form className="workout-assign-form" onSubmit={handleSubmit}>
+      <div className="form-group"><label>Program Adı</label><input type="text" value={programName} onChange={e => setProgramName(e.target.value)} required /></div>
+      {days.map((day, dIdx) => (
+        <div key={dIdx} className="day-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            <select className="modal-input" value={day.day_of_week} onChange={e => updateDay(dIdx, 'day_of_week', e.target.value)}>
+              {Object.entries(DAY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <input className="modal-input" placeholder="Bölge (Örn: Göğüs-Kol)" value={day.muscle_group} onChange={e => updateDay(dIdx, 'muscle_group', e.target.value)} required />
+            <button type="button" className="btn-danger" onClick={() => removeDay(dIdx)}>×</button>
+          </div>
+          {day.exercises.map((ex, eIdx) => (
+            <div key={eIdx} style={{ display: 'grid', gridTemplateColumns: '1fr 50px 80px 60px 30px', gap: '0.4rem', marginBottom: '0.4rem', alignItems: 'center' }}>
+              <select style={{ fontSize: '0.8rem' }} value={ex.exercise_id} onChange={e => updateEx(dIdx, eIdx, 'exercise_id', e.target.value)}>
+                {exercises.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+              </select>
+              <input type="number" placeholder="Set" value={ex.sets} onChange={e => updateEx(dIdx, eIdx, 'sets', e.target.value)} />
+              <input type="text" placeholder="Rps" value={ex.reps} onChange={e => updateEx(dIdx, eIdx, 'reps', e.target.value)} />
+              <input type="number" placeholder="kg" value={ex.weight_kg} onChange={e => updateEx(dIdx, eIdx, 'weight_kg', e.target.value)} />
+              <button type="button" style={{ color: '#FF3B30' }} onClick={() => removeEx(dIdx, eIdx)}>×</button>
+            </div>
+          ))}
+          <button type="button" className="btn-action" style={{ fontSize: '0.75rem' }} onClick={() => addEx(dIdx)}>+ Hareket Ekle</button>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+        <button type="button" className="btn-action" onClick={addDay}>+ Gün Ekle</button>
+        <button type="submit" className="btn-primary" style={{ flex: 1 }} disabled={loading}>{loading ? 'Kaydediliyor...' : 'Programı Yayınla'}</button>
+      </div>
+    </form>
+  );
+};
 
 export default App;

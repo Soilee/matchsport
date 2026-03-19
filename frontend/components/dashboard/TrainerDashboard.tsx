@@ -121,9 +121,9 @@ export default function TrainerDashboard({ trainerStats, onRefresh }: Props) {
                                 <Ionicons name="barbell" size={16} color="#fff" />
                                 <Text style={styles.actionBtnText}>Program</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: 'rgba(52, 199, 89, 0.2)' }]}>
-                                <Ionicons name="restaurant" size={16} color={Colors.success} />
-                                <Text style={[styles.actionBtnText, { color: Colors.success }]}>Diyet</Text>
+                            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: 'rgba(0, 122, 255, 0.2)' }]}>
+                                <Ionicons name="folder-open-outline" size={16} color="#007AFF" />
+                                <Text style={[styles.actionBtnText, { color: '#007AFF' }]}>Kayıtlar</Text>
                             </TouchableOpacity>
                         </View>
                     </Card>
