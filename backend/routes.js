@@ -250,7 +250,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
         const today = dayNames[new Date().getDay()];
         let todayWorkout = null;
 
-        if (programRes.data) {
+        if (programRes && programRes.data) {
             const { data: workoutDay } = await db.from('workout_days').select('*').eq('program_id', programRes.data.id).eq('day_of_week', today).maybeSingle();
             if (workoutDay) {
                 const { data: exercises } = await db.from('workout_exercises').select('*, exercises(name, muscle_group, equipment)').eq('workout_day_id', workoutDay.id).order('order_index');
@@ -343,8 +343,8 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             trainerStats,
         });
     } catch (err) {
-        console.error('Dash Error:', err);
-        res.status(500).json({ error: 'Dashboard verileri yüklenemedi' });
+        console.error('Dash Error:', err.message, err.stack);
+        res.status(500).json({ error: 'Dashboard verileri yüklenemedi: ' + err.message });
     }
 });
 
