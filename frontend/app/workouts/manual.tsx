@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -81,90 +81,96 @@ export default function ManualWorkoutScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()}>
-                    <Ionicons name="chevron-back" size={28} color={Colors.text} />
-                </TouchableOpacity>
-                <Text style={styles.title}>Yeni Antrenman Girişi</Text>
-                <TouchableOpacity onPress={saveWorkout} disabled={loading}>
-                    <Text style={[styles.saveBtn, loading && { opacity: 0.5 }]}>KAYDET</Text>
-                </TouchableOpacity>
-            </View>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <SafeAreaView style={styles.container}>
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => router.back()}>
+                        <Ionicons name="chevron-back" size={28} color={Colors.text} />
+                    </TouchableOpacity>
+                    <Text style={styles.title}>Yeni Antrenman Girişi</Text>
+                    <TouchableOpacity onPress={saveWorkout} disabled={loading}>
+                        <Text style={[styles.saveBtn, loading && { opacity: 0.5 }]}>KAYDET</Text>
+                    </TouchableOpacity>
+                </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                <Text style={styles.label}>Antrenman Adı</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Örn: Göğüs & Ön Kol"
-                    placeholderTextColor={Colors.textMuted}
-                    value={workoutName}
-                    onChangeText={setWorkoutName}
-                />
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                >
+                    <Text style={styles.label}>Antrenman Adı</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Örn: Göğüs & Ön Kol"
+                        placeholderTextColor={Colors.textMuted}
+                        value={workoutName}
+                        onChangeText={setWorkoutName}
+                    />
 
-                <Text style={[styles.label, { marginTop: 24 }]}>Gün Seçimi</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.daysScroll}>
-                    {DAYS.map(day => (
-                        <TouchableOpacity
-                            key={day.id}
-                            style={[styles.dayBtn, selectedDay === day.id && styles.dayBtnActive]}
-                            onPress={() => setSelectedDay(day.id)}
-                        >
-                            <Text style={[styles.dayBtnText, selectedDay === day.id && styles.dayBtnTextActive]}>
-                                {day.label}
-                            </Text>
-                        </TouchableOpacity>
+                    <Text style={[styles.label, { marginTop: 24 }]}>Gün Seçimi</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.daysScroll}>
+                        {DAYS.map(day => (
+                            <TouchableOpacity
+                                key={day.id}
+                                style={[styles.dayBtn, selectedDay === day.id && styles.dayBtnActive]}
+                                onPress={() => setSelectedDay(day.id)}
+                            >
+                                <Text style={[styles.dayBtnText, selectedDay === day.id && styles.dayBtnTextActive]}>
+                                    {day.label}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+
+                    <Text style={[styles.label, { marginTop: 24 }]}>Egzersizler</Text>
+                    {exercises.map((ex, index) => (
+                        <Card key={index} style={styles.exerciseCard}>
+                            <TextInput
+                                style={styles.exerciseNameInput}
+                                placeholder="Hareket Adı (Örn: Bench Press)"
+                                placeholderTextColor={Colors.textMuted}
+                                value={ex.name}
+                                onChangeText={(val) => updateExercise(index, 'name', val)}
+                            />
+                            <View style={styles.row}>
+                                <View style={styles.col}>
+                                    <Text style={styles.miniLabel}>Set</Text>
+                                    <TextInput
+                                        style={styles.miniInput}
+                                        keyboardType="numeric"
+                                        value={ex.sets}
+                                        onChangeText={(val) => updateExercise(index, 'sets', val)}
+                                    />
+                                </View>
+                                <View style={styles.col}>
+                                    <Text style={styles.miniLabel}>Tekrar</Text>
+                                    <TextInput
+                                        style={styles.miniInput}
+                                        keyboardType="numeric"
+                                        value={ex.reps}
+                                        onChangeText={(val) => updateExercise(index, 'reps', val)}
+                                    />
+                                </View>
+                                <View style={styles.col}>
+                                    <Text style={styles.miniLabel}>Ağırlık (kg)</Text>
+                                    <TextInput
+                                        style={styles.miniInput}
+                                        keyboardType="numeric"
+                                        value={ex.weight}
+                                        onChangeText={(val) => updateExercise(index, 'weight', val)}
+                                    />
+                                </View>
+                            </View>
+                        </Card>
                     ))}
+
+                    <TouchableOpacity style={styles.addExerciseBtn} onPress={addExercise}>
+                        <Ionicons name="add-circle-outline" size={24} color={Colors.primary} />
+                        <Text style={styles.addExerciseText}>Hareket Ekle</Text>
+                    </TouchableOpacity>
                 </ScrollView>
-
-                <Text style={[styles.label, { marginTop: 24 }]}>Egzersizler</Text>
-                {exercises.map((ex, index) => (
-                    <Card key={index} style={styles.exerciseCard}>
-                        <TextInput
-                            style={styles.exerciseNameInput}
-                            placeholder="Hareket Adı (Örn: Bench Press)"
-                            placeholderTextColor={Colors.textMuted}
-                            value={ex.name}
-                            onChangeText={(val) => updateExercise(index, 'name', val)}
-                        />
-                        <View style={styles.row}>
-                            <View style={styles.col}>
-                                <Text style={styles.miniLabel}>Set</Text>
-                                <TextInput
-                                    style={styles.miniInput}
-                                    keyboardType="numeric"
-                                    value={ex.sets}
-                                    onChangeText={(val) => updateExercise(index, 'sets', val)}
-                                />
-                            </View>
-                            <View style={styles.col}>
-                                <Text style={styles.miniLabel}>Tekrar</Text>
-                                <TextInput
-                                    style={styles.miniInput}
-                                    keyboardType="numeric"
-                                    value={ex.reps}
-                                    onChangeText={(val) => updateExercise(index, 'reps', val)}
-                                />
-                            </View>
-                            <View style={styles.col}>
-                                <Text style={styles.miniLabel}>Ağırlık (kg)</Text>
-                                <TextInput
-                                    style={styles.miniInput}
-                                    keyboardType="numeric"
-                                    value={ex.weight}
-                                    onChangeText={(val) => updateExercise(index, 'weight', val)}
-                                />
-                            </View>
-                        </View>
-                    </Card>
-                ))}
-
-                <TouchableOpacity style={styles.addExerciseBtn} onPress={addExercise}>
-                    <Ionicons name="add-circle-outline" size={24} color={Colors.primary} />
-                    <Text style={styles.addExerciseText}>Hareket Ekle</Text>
-                </TouchableOpacity>
-            </ScrollView>
-        </SafeAreaView>
+            </SafeAreaView>
+        </TouchableWithoutFeedback>
     );
 }
 

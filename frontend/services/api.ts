@@ -188,8 +188,8 @@ export const completeWorkoutDay = async (workout_day_id: string) => {
     return res.data;
 };
 
-export const logAiMeal = async (text: string) => {
-    const res = await api.post('/nutrition/ai-log-meal', { text });
+export const logAiMeal = async (text: string, mealType?: string) => {
+    const res = await api.post('/nutrition/ai-log-meal', { text, mealType });
     return res.data;
 };
 
@@ -210,7 +210,7 @@ export const saveDietPlan = async (data: any) => {
 
 export const getInstallments = async () => (await api.get('/user/installments')).data;
 export const adminGetUserInstallments = async (userId: string) => (await api.get(`/admin/user-installments/${userId}`)).data;
-export const adminPayInstallment = async (instId: string) => (await api.post(`/admin/pay-installment/${instId}`)).data;
+export const adminPayInstallment = async (instId: string) => (await api.put(`/admin/installments/${instId}/pay`)).data;
 
 
 export default api;

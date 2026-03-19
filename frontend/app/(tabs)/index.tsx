@@ -35,6 +35,7 @@ interface ExtendedUser extends User {
 interface ExtendedDashboardData extends Omit<DashboardData, 'user'> {
   user: ExtendedUser;
   unreadNotifications: number;
+  installments: any[];
 }
 
 export default function DashboardScreen() {
@@ -176,10 +177,14 @@ export default function DashboardScreen() {
                 <AdminDashboard
                   adminStats={data.adminStats}
                   occupancy={data.occupancy || { current_count: 0, max_capacity: 50 }}
+                  onRefresh={loadData}
                 />
               )}
               {currentUserRole === 'trainer' && data.trainerStats && (
-                <TrainerDashboard trainerStats={data.trainerStats} />
+                <TrainerDashboard
+                  trainerStats={data.trainerStats}
+                  onRefresh={loadData}
+                />
               )}
 
               {/* STREAK WIDGET */}
@@ -221,7 +226,10 @@ export default function DashboardScreen() {
                 return null;
               })()}
 
-              <MembershipCard membership={data?.membership || null} />
+              <MembershipCard
+                membership={data?.membership || null}
+                installments={data?.installments || []}
+              />
 
               <MinimalistOccupancy
                 currentCount={data?.occupancy?.current_count || 0}

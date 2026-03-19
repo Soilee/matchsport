@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, ScrollView, RefreshControl, ActivityIndicator, TouchableOpacity, Alert, TextInput, TouchableWithoutFeedback, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, RefreshControl, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -84,6 +84,9 @@ export default function WorkoutsScreen() {
         loadData();
     }, [loadData]);
 
+    const [selectedMeal, setSelectedMeal] = useState('1. Öğün');
+    const mealOptions = ['1. Öğün', '2. Öğün', '3. Öğün', '4. Öğün', '5. Öğün', 'Atıştırmalık', 'Antrenman Öncesi', 'Antrenman Sonrası'];
+
     if (loading && !refreshing) {
         return (
             <View style={styles.centered}>
@@ -97,10 +100,10 @@ export default function WorkoutsScreen() {
         setAiLoading(true);
         try {
             const { logAiMeal } = await import('@/services/api');
-            await logAiMeal(aiInput);
+            await logAiMeal(aiInput, selectedMeal);
             setAiInput('');
             setIsLogging(false);
-            Alert.alert('Başarılı', 'Öğün yapay zeka tarafından analiz edildi ve kaydedildi! ✨');
+            Alert.alert('Başarılı', 'Öğün analiz edildi ve kaydedildi! ✨');
             loadData();
         } catch (error) {
             console.error('AI Log Error:', error);
@@ -460,7 +463,53 @@ export default function WorkoutsScreen() {
                     </View>
                 </Card>
 
-                {/* 2. Log Meal */}
+                {/* 2. Log Meal Modal */}
+                <Modal visible={isLogging} transparent animationType="slide">
+                    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                        <View style={styles.modalOverlay}>
+                            <View style={styles.modalContent}>
+                                <Text style={styles.modalTitle}>Ne Yedin? 🥗</Text>
+
+                                <Text style={styles.label}>Öğün Seçimi</Text>
+                                <View style={styles.mealSelector}>
+                                    {mealOptions.map(m => (
+                                        <TouchableOpacity
+                                            key={m}
+                                            style={[styles.mealOption, selectedMeal === m && styles.selectedMealOption]}
+                                            onPress={() => setSelectedMeal(m)}
+                                        >
+                                            <Text style={[styles.mealOptionText, selectedMeal === m && styles.selectedMealOptionText]}>{m}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+
+                                <TextInput
+                                    style={styles.modalInput}
+                                    placeholder="Örn: 1 kase yulaf, 2 tam yumurta ve 1 muz"
+                                    placeholderTextColor={Colors.textMuted}
+                                    value={aiInput}
+                                    onChangeText={setAiInput}
+                                    multiline
+                                />
+
+                                <View style={{ flexDirection: 'row', gap: 12 }}>
+                                    <TouchableOpacity style={[styles.aiBtn, { flex: 1, backgroundColor: 'rgba(255,255,255,0.05)' }]} onPress={() => setIsLogging(false)}>
+                                        <Text style={styles.aiBtnText}>İptal</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={[styles.aiBtn, { flex: 2 }]} onPress={handleAiMealLog} disabled={aiLoading}>
+                                        {aiLoading ? <ActivityIndicator color="#fff" /> : (
+                                            <>
+                                                <Ionicons name="sparkles" size={20} color="#fff" />
+                                                <Text style={styles.aiBtnText}>Analiz Et & Kaydet</Text>
+                                            </>
+                                        )}
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </View>
+                    </TouchableWithoutFeedback>
+                </Modal>
+
                 <TouchableOpacity style={styles.addFoodBtn} onPress={() => setIsLogging(true)}>
                     <Ionicons name="add-circle" size={24} color="#fff" />
                     <Text style={styles.addFoodText}>Yediklerini Kaydet</Text>
@@ -549,99 +598,124 @@ export default function WorkoutsScreen() {
 
                 {/* Manual Diet Entry Modal */}
                 {isManualDietMode && (
-                    <KeyboardAvoidingView
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                        style={styles.modalOverlay}
-                    >
-                        <View style={[styles.modalContent, { maxHeight: '80%' }]}>
-                            <ScrollView showsVerticalScrollIndicator={false} nestedScrollEnabled={true} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-                                <Text style={styles.modalTitle}>Manuel Diyet Girişi</Text>
-
-                                <View style={styles.formGroup}>
-                                    <Text style={styles.label}>Hedef / Plan Adı</Text>
-                                    <TextInput
-                                        style={styles.aiInputModal}
-                                        placeholder="Örn: 1. Ay Hacim Planı"
-                                        value={manualDietData.goal}
-                                        onChangeText={t => setManualDietData({ ...manualDietData, goal: t })}
-                                    />
-                                </View>
-
-                                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={styles.label}>Kalori</Text>
-                                        <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.daily_calories} onChangeText={t => setManualDietData({ ...manualDietData, daily_calories: t })} />
-                                    </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={styles.label}>P (g)</Text>
-                                        <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.protein_g} onChangeText={t => setManualDietData({ ...manualDietData, protein_g: t })} />
-                                    </View>
-                                </View>
-
-                                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={styles.label}>K (g)</Text>
-                                        <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.carbs_g} onChangeText={t => setManualDietData({ ...manualDietData, carbs_g: t })} />
-                                    </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={styles.label}>Y (g)</Text>
-                                        <TextInput style={styles.aiInputModal} keyboardType="numeric" value={manualDietData.fat_g} onChangeText={t => setManualDietData({ ...manualDietData, fat_g: t })} />
-                                    </View>
-                                </View>
-
-                                <Text style={[styles.label, { marginBottom: 10 }]}>Öğünler</Text>
-                                {manualDietData.meals.map((meal, idx) => (
-                                    <View key={idx} style={{ marginBottom: 20, padding: 10, borderLeftWidth: 2, borderLeftColor: Colors.primary }}>
-                                        <TextInput
-                                            style={[styles.aiInputModal, { minHeight: 40, marginBottom: 5 }]}
-                                            placeholder="Öğün Adı (Örn: Kahvaltı)"
-                                            value={meal.name}
-                                            onChangeText={t => {
-                                                const newMeals = [...manualDietData.meals];
-                                                newMeals[idx].name = t;
-                                                setManualDietData({ ...manualDietData, meals: newMeals });
-                                            }}
-                                        />
-                                        <TextInput
-                                            style={[styles.aiInputModal, { minHeight: 60 }]}
-                                            placeholder="Yiyecekler (Virgül ile ayırın)"
-                                            multiline
-                                            onChangeText={t => {
-                                                const newMeals = [...manualDietData.meals];
-                                                newMeals[idx].items = t.split(',').map(s => s.trim());
-                                                setManualDietData({ ...manualDietData, meals: newMeals });
-                                            }}
-                                        />
-                                    </View>
-                                ))}
-
-                                <TouchableOpacity
-                                    style={{ alignItems: 'center', marginBottom: 20 }}
-                                    onPress={() => setManualDietData({
-                                        ...manualDietData,
-                                        meals: [...manualDietData.meals, { name: `${manualDietData.meals.length + 1}. Öğün`, time: '00:00', items: [''] }]
-                                    })}
+                    <Modal visible={isManualDietMode} transparent animationType="slide">
+                        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                            <View style={styles.modalOverlay}>
+                                <KeyboardAvoidingView
+                                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                                    style={{ width: '100%', alignItems: 'center' }}
                                 >
-                                    <Text style={{ color: Colors.primary }}>+ Öğün Ekle</Text>
-                                </TouchableOpacity>
+                                    <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+                                        <Text style={styles.modalTitle}>Diyet Planı Oluştur</Text>
+                                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                                            <Text style={styles.label}>Hedefiniz</Text>
+                                            <TextInput
+                                                style={styles.modalInput}
+                                                placeholder="Örn: Yağ yakımı ve kas kazanımı"
+                                                placeholderTextColor={Colors.textMuted}
+                                                value={manualDietData.goal}
+                                                onChangeText={(val) => setManualDietData({ ...manualDietData, goal: val })}
+                                            />
 
-                                <View style={styles.modalFooter}>
-                                    <TouchableOpacity
-                                        style={styles.btnSecondary}
-                                        onPress={() => {
-                                            setManualDietData({ goal: '', daily_calories: '', protein_g: '', carbs_g: '', fat_g: '', meals: [{ name: '1. Öğün', time: '08:00', items: [''] }] });
-                                            setIsManualDietMode(false);
-                                        }}
-                                    >
-                                        <Text style={styles.btnSecondaryText}>Vazgeç</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={styles.aiLogBtn} onPress={handleManualDietSubmit}>
-                                        {aiLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.aiLogBtnText}>Kaydet</Text>}
-                                    </TouchableOpacity>
-                                </View>
-                            </ScrollView>
-                        </View>
-                    </KeyboardAvoidingView>
+                                            <View style={styles.row}>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={styles.label}>Kalori</Text>
+                                                    <TextInput
+                                                        style={styles.modalInput}
+                                                        placeholder="2500"
+                                                        keyboardType="numeric"
+                                                        placeholderTextColor={Colors.textMuted}
+                                                        value={manualDietData.daily_calories}
+                                                        onChangeText={(val) => setManualDietData({ ...manualDietData, daily_calories: val })}
+                                                    />
+                                                </View>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={styles.label}>Protein (g)</Text>
+                                                    <TextInput
+                                                        style={styles.modalInput}
+                                                        placeholder="180"
+                                                        keyboardType="numeric"
+                                                        placeholderTextColor={Colors.textMuted}
+                                                        value={manualDietData.protein_g}
+                                                        onChangeText={(val) => setManualDietData({ ...manualDietData, protein_g: val })}
+                                                    />
+                                                </View>
+                                            </View>
+
+                                            <View style={styles.row}>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={styles.label}>Karb (g)</Text>
+                                                    <TextInput
+                                                        style={styles.modalInput}
+                                                        placeholder="200"
+                                                        keyboardType="numeric"
+                                                        placeholderTextColor={Colors.textMuted}
+                                                        value={manualDietData.carbs_g}
+                                                        onChangeText={(val) => setManualDietData({ ...manualDietData, carbs_g: val })}
+                                                    />
+                                                </View>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={styles.label}>Yağ (g)</Text>
+                                                    <TextInput
+                                                        style={styles.modalInput}
+                                                        placeholder="70"
+                                                        keyboardType="numeric"
+                                                        placeholderTextColor={Colors.textMuted}
+                                                        value={manualDietData.fat_g}
+                                                        onChangeText={(val) => setManualDietData({ ...manualDietData, fat_g: val })}
+                                                    />
+                                                </View>
+                                            </View>
+
+                                            <Text style={[styles.label, { marginTop: 12 }]}>Öğünler</Text>
+                                            {manualDietData.meals.map((meal, idx) => (
+                                                <View key={idx} style={styles.mealEditCard}>
+                                                    <View style={styles.row}>
+                                                        <TextInput
+                                                            style={[styles.modalInput, { flex: 2, marginBottom: 0 }]}
+                                                            value={meal.name}
+                                                            onChangeText={(val) => {
+                                                                const newMeals = [...manualDietData.meals];
+                                                                newMeals[idx].name = val;
+                                                                setManualDietData({ ...manualDietData, meals: newMeals });
+                                                            }}
+                                                        />
+                                                        <TextInput
+                                                            style={[styles.modalInput, { flex: 1, marginBottom: 0 }]}
+                                                            value={meal.time}
+                                                            onChangeText={(val) => {
+                                                                const newMeals = [...manualDietData.meals];
+                                                                newMeals[idx].time = val;
+                                                                setManualDietData({ ...manualDietData, meals: newMeals });
+                                                            }}
+                                                        />
+                                                    </View>
+                                                </View>
+                                            ))}
+                                            <TouchableOpacity
+                                                style={{ alignItems: 'center', marginVertical: 12 }}
+                                                onPress={() => setManualDietData({
+                                                    ...manualDietData,
+                                                    meals: [...manualDietData.meals, { name: `${manualDietData.meals.length + 1}. Öğün`, time: '00:00', items: [''] }]
+                                                })}
+                                            >
+                                                <Text style={{ color: Colors.primary, fontWeight: '700' }}>+ Öğün Ekle</Text>
+                                            </TouchableOpacity>
+                                        </ScrollView>
+
+                                        <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
+                                            <TouchableOpacity style={[styles.aiBtn, { flex: 1, backgroundColor: 'rgba(255,255,255,0.05)' }]} onPress={() => setIsManualDietMode(false)}>
+                                                <Text style={styles.aiBtnText}>İptal</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity style={[styles.aiBtn, { flex: 2 }]} onPress={handleManualDietSubmit}>
+                                                <Text style={styles.aiBtnText}>Planı Kaydet</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                </KeyboardAvoidingView>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </Modal>
                 )}
 
                 {/* Logging Modal */}
@@ -688,7 +762,7 @@ export default function WorkoutsScreen() {
                     </View>
                 )}
             </SafeAreaView>
-        </TouchableWithoutFeedback>
+        </TouchableWithoutFeedback >
     );
 }
 
@@ -701,12 +775,23 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: Colors.background,
     },
-    tabs: {
+    header: {
+        paddingVertical: 12,
+    },
+    title: {
+        fontSize: 24,
+        fontWeight: '900',
+        color: Colors.text,
+        paddingHorizontal: 16,
+        marginBottom: 16,
+    },
+    tabContainer: {
         flexDirection: 'row',
-        padding: 16,
-        gap: 12,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderRadius: 16,
+        padding: 4,
+        marginHorizontal: 16,
     },
     tab: {
         flex: 1,
@@ -714,51 +799,34 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
-        padding: 12,
+        paddingVertical: 12,
         borderRadius: 12,
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        borderWidth: 1,
-        borderColor: 'transparent',
     },
     activeTab: {
         backgroundColor: 'rgba(255, 107, 53, 0.1)',
-        borderColor: Colors.primary,
     },
     tabText: {
         color: Colors.textMuted,
         fontWeight: '700',
-        fontSize: 14,
+        fontSize: 13,
     },
     activeTabText: {
-        color: Colors.text,
+        color: Colors.primary,
     },
     scrollContent: {
         padding: 16,
         paddingBottom: 40,
     },
-    emptyState: {
-        padding: 40,
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 16,
-    },
-    emptyText: {
-        color: Colors.textMuted,
-        textAlign: 'center',
-        fontSize: 16,
-    },
     programCard: {
         padding: 0,
         overflow: 'hidden',
-        marginBottom: 24,
+        marginBottom: 20,
     },
     programHeader: {
         padding: 20,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255, 255, 255, 0.05)',
     },
     programTitle: {
         color: Colors.text,
@@ -772,23 +840,25 @@ const styles = StyleSheet.create({
     },
     activeBadge: {
         backgroundColor: Colors.success,
-        paddingHorizontal: 12,
+        paddingHorizontal: 10,
         paddingVertical: 4,
-        borderRadius: 12,
+        borderRadius: 8,
     },
     activeText: {
         color: '#fff',
-        fontSize: 12,
-        fontWeight: '700',
+        fontSize: 10,
+        fontWeight: '900',
     },
     daysScroll: {
-        padding: 16,
+        paddingHorizontal: 20,
+        paddingBottom: 20,
         gap: 12,
     },
     dayButton: {
-        padding: 12,
-        borderRadius: 12,
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 12,
         alignItems: 'center',
         minWidth: 80,
     },
@@ -797,50 +867,71 @@ const styles = StyleSheet.create({
     },
     dayText: {
         color: Colors.textMuted,
+        fontSize: 12,
         fontWeight: '700',
-        marginBottom: 4,
+        marginBottom: 2,
     },
     dayTextActive: {
         color: '#fff',
     },
     muscleText: {
         color: Colors.text,
-        fontSize: 12,
-        fontWeight: '600',
+        fontSize: 14,
+        fontWeight: '800',
     },
     muscleTextActive: {
         color: '#fff',
+    },
+    hybridActions: {
+        marginBottom: 24,
+    },
+    manualEntryBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        padding: 16,
+        borderRadius: 16,
+        gap: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    manualEntryText: {
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    exercisesList: {
+        gap: 16,
     },
     sectionTitle: {
         color: Colors.text,
         fontSize: 18,
         fontWeight: '800',
-        marginBottom: 16,
-    },
-    exercisesList: {
-        gap: 16,
+        marginBottom: 12,
     },
     exerciseCard: {
         padding: 16,
+        marginBottom: 4,
     },
     exerciseHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 16,
         marginBottom: 16,
+        gap: 12,
     },
     exerciseNumber: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
+        width: 24,
+        height: 24,
+        borderRadius: 12,
         backgroundColor: 'rgba(255, 107, 53, 0.1)',
         alignItems: 'center',
         justifyContent: 'center',
     },
     exerciseNumberText: {
         color: Colors.primary,
-        fontWeight: '800',
-        fontSize: 16,
+        fontSize: 12,
+        fontWeight: '900',
     },
     exerciseInfo: {
         flex: 1,
@@ -849,7 +940,7 @@ const styles = StyleSheet.create({
         color: Colors.text,
         fontSize: 16,
         fontWeight: '700',
-        marginBottom: 4,
+        marginBottom: 2,
     },
     exerciseDetails: {
         color: Colors.textMuted,
@@ -857,9 +948,7 @@ const styles = StyleSheet.create({
     },
     setsInfo: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: 'rgba(255, 255, 255, 0.02)',
+        backgroundColor: 'rgba(255, 255, 255, 0.03)',
         borderRadius: 12,
         padding: 12,
     },
@@ -869,119 +958,48 @@ const styles = StyleSheet.create({
     },
     statVal: {
         color: Colors.text,
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: '800',
     },
     statLabel: {
         color: Colors.textMuted,
-        fontSize: 12,
+        fontSize: 10,
+        fontWeight: '600',
         marginTop: 2,
     },
     statDivider: {
         width: 1,
-        height: 30,
+        height: '100%',
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
     },
-    restText: {
-        color: Colors.success,
-        fontSize: 18,
-        fontWeight: '600',
-        textAlign: 'center',
-        marginTop: 20,
-    },
-    dietHeaderCard: {
-        padding: 24,
-        marginBottom: 24,
-        alignItems: 'center',
-    },
-    dietGoal: {
-        color: Colors.text,
-        fontSize: 20,
-        fontWeight: '800',
-        marginBottom: 20,
-    },
-    macroRow: {
+    completeWorkoutBtn: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        width: '100%',
-    },
-    macroStat: {
-        alignItems: 'center',
-    },
-    macroVal: {
-        fontSize: 22,
-        fontWeight: '900',
-        color: Colors.text,
-    },
-    macroLab: {
-        fontSize: 12,
-        color: Colors.textMuted,
-        marginTop: 4,
-    },
-    mealCard: {
-        padding: 20,
-        marginBottom: 16,
-    },
-    mealName: {
-        color: Colors.text,
-        fontSize: 18,
-        fontWeight: '800',
-    },
-    mealTime: {
-        color: Colors.primary,
-        fontSize: 14,
-        fontWeight: '600',
-        marginBottom: 16,
-        marginTop: 4,
-    },
-    mealItems: {
-        gap: 8,
-    },
-    mealItemRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    mealItemText: {
-        color: Colors.textSecondary,
-        fontSize: 14,
-    },
-    editButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        backgroundColor: 'rgba(255, 107, 53, 0.1)',
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 107, 53, 0.2)',
-    },
-    editButtonText: {
-        color: Colors.primary,
-        fontSize: 12,
-        fontWeight: '700',
-    },
-    hybridActions: {
-        marginBottom: 24,
-    },
-    manualEntryBtn: {
-        flexDirection: 'row',
+        backgroundColor: Colors.primary,
+        padding: 18,
+        borderRadius: 16,
         alignItems: 'center',
         justifyContent: 'center',
         gap: 12,
-        backgroundColor: Colors.primary,
-        padding: 16,
-        borderRadius: 12,
+        marginTop: 20,
     },
-    manualEntryText: {
+    completeWorkoutBtnText: {
         color: '#fff',
         fontSize: 16,
-        fontWeight: '700',
+        fontWeight: '900',
+    },
+    emptyState: {
+        padding: 40,
+        alignItems: 'center',
+        gap: 16,
+    },
+    emptyText: {
+        color: Colors.textMuted,
+        textAlign: 'center',
+        fontSize: 14,
     },
     manualHistoryCard: {
-        marginBottom: 12,
         padding: 16,
+        marginBottom: 12,
     },
     manualHistoryContent: {
         flexDirection: 'row',
@@ -990,93 +1008,73 @@ const styles = StyleSheet.create({
     },
     manualHistoryName: {
         color: Colors.text,
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '700',
+        marginBottom: 2,
     },
     manualHistoryDate: {
         color: Colors.textMuted,
         fontSize: 12,
-        marginTop: 4,
     },
-    completeWorkoutBtn: {
+    dietHeaderCard: {
+        padding: 20,
+        marginBottom: 8,
+    },
+    dietGoal: {
+        color: Colors.text,
+        fontSize: 18,
+        fontWeight: '900',
+        marginBottom: 16,
+        textAlign: 'center',
+    },
+    macroRow: {
         flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
         gap: 12,
-        backgroundColor: Colors.primary,
-        padding: 16,
-        borderRadius: 16,
-        marginTop: 16,
     },
-    completeWorkoutBtnText: {
-        color: '#fff',
+    macroStat: {
+        flex: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+        padding: 12,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    macroVal: {
+        color: Colors.text,
         fontSize: 16,
         fontWeight: '800',
     },
-    aiSubtitle: {
+    macroLab: {
+        color: Colors.textMuted,
+        fontSize: 10,
+        fontWeight: '600',
+        marginTop: 2,
+    },
+    mealCard: {
+        padding: 16,
+        marginBottom: 4,
+    },
+    mealName: {
+        color: Colors.text,
+        fontSize: 16,
+        fontWeight: '800',
+    },
+    mealTime: {
+        color: Colors.primary,
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    mealItems: {
+        marginTop: 12,
+        gap: 8,
+    },
+    mealItemRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    mealItemText: {
         color: Colors.textMuted,
         fontSize: 14,
-        marginBottom: 16,
-    },
-    aiInput: {
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        borderRadius: 12,
-        padding: 16,
-        color: Colors.text,
-        fontSize: 16,
-        minHeight: 100,
-        textAlignVertical: 'top',
-        marginBottom: 16,
-    },
-    aiBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        backgroundColor: Colors.primary,
-        padding: 14,
-        borderRadius: 12,
-        marginBottom: 16,
-    },
-    aiBtnText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '700',
-    },
-    aiResultContainer: {
-        backgroundColor: 'rgba(52, 199, 89, 0.1)',
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: 'rgba(52, 199, 89, 0.3)',
-    },
-    aiResultTitle: {
-        color: Colors.success,
-        fontSize: 16,
-        fontWeight: '800',
-        marginBottom: 12,
-    },
-    aiResultGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
-        marginBottom: 16,
-    },
-    aiResultText: {
-        color: Colors.text,
-        fontSize: 14,
-        fontWeight: '600',
-        width: '45%',
-    },
-    aiSaveBtn: {
-        backgroundColor: Colors.success,
-        padding: 12,
-        borderRadius: 8,
-        alignItems: 'center',
-    },
-    aiSaveBtnText: {
-        color: '#fff',
-        fontWeight: '700',
     },
     macroCard: {
         padding: 20,
@@ -1084,18 +1082,18 @@ const styles = StyleSheet.create({
     },
     addFoodBtn: {
         flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 12,
         backgroundColor: Colors.primary,
         padding: 16,
-        borderRadius: 12,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
         marginBottom: 24,
     },
     addFoodText: {
         color: '#fff',
-        fontSize: 16,
-        fontWeight: '700',
+        fontSize: 15,
+        fontWeight: '800',
     },
     logCard: {
         padding: 16,
@@ -1106,43 +1104,179 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         marginBottom: 8,
     },
+    logMealType: {
+        color: Colors.primary,
+        fontSize: 10,
+        fontWeight: '900',
+        textTransform: 'uppercase',
+        marginBottom: 2,
+    },
     logFoodName: {
         color: Colors.text,
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '700',
+    },
+    logCalories: {
+        color: Colors.text,
+        fontSize: 15,
+        fontWeight: '800',
     },
     logWeight: {
-        color: Colors.primary,
-        fontWeight: '700',
+        color: Colors.textMuted,
+        fontSize: 12,
     },
     logMacros: {
-        opacity: 0.7,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255, 255, 255, 0.05)',
+        paddingTop: 8,
     },
     logMacroText: {
-        color: Colors.textSecondary,
+        color: Colors.textMuted,
         fontSize: 12,
     },
     modalOverlay: {
-        position: 'absolute',
-        top: 0, left: 0, right: 0, bottom: 0,
+        flex: 1,
         backgroundColor: 'rgba(0,0,0,0.8)',
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 1000,
+        padding: 20,
     },
     modalContent: {
-        width: '90%',
-        backgroundColor: '#1E1E2E',
-        borderRadius: 20,
-        padding: 20,
+        backgroundColor: '#1C1C1E',
+        borderRadius: 24,
+        padding: 24,
+        width: '100%',
+        maxWidth: 420,
         borderWidth: 1,
-        borderColor: 'rgba(255,107,53,0.2)',
+        borderColor: 'rgba(255,255,255,0.1)',
     },
     modalTitle: {
+        color: '#fff',
+        fontSize: 22,
+        fontWeight: '900',
+        textAlign: 'center',
+        marginBottom: 20,
+    },
+    label: {
+        color: Colors.textMuted,
+        fontSize: 12,
+        fontWeight: '700',
+        marginBottom: 8,
+        textTransform: 'uppercase',
+    },
+    mealSelector: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 20,
+    },
+    mealOption: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 10,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+    },
+    selectedMealOption: {
+        backgroundColor: Colors.primary,
+    },
+    mealOptionText: {
+        color: Colors.text,
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    selectedMealOptionText: {
+        color: '#fff',
+    },
+    modalInput: {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderRadius: 12,
+        padding: 16,
+        color: Colors.text,
+        fontSize: 15,
+        marginBottom: 16,
+    },
+    aiBtn: {
+        flexDirection: 'row',
+        backgroundColor: Colors.primary,
+        padding: 16,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    aiBtnText: {
+        color: '#fff',
+        fontWeight: '800',
+        fontSize: 14,
+    },
+    row: {
+        flexDirection: 'row',
+        gap: 12,
+        marginBottom: 12,
+    },
+    mealEditCard: {
+        backgroundColor: 'rgba(255,255,255,0.03)',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 8,
+    },
+    aiFeedbackContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 4,
+        backgroundColor: 'rgba(255, 107, 53, 0.05)',
+        padding: 8,
+        borderRadius: 8,
+    },
+    aiFeedbackText: {
+        color: Colors.text,
+        fontSize: 11,
+        fontStyle: 'italic',
+        flex: 1,
+    },
+    dietAiContainer: {
+        marginBottom: 20,
+    },
+    dietAiCard: {
+        padding: 24,
+    },
+    dietAiTitle: {
         color: Colors.text,
         fontSize: 20,
         fontWeight: '800',
+        textAlign: 'center',
+        marginBottom: 8,
+    },
+    dietAiSubtitle: {
+        color: Colors.textMuted,
+        fontSize: 14,
+        textAlign: 'center',
+        lineHeight: 20,
         marginBottom: 20,
+    },
+    dietAiInput: {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderRadius: 12,
+        padding: 16,
+        color: Colors.text,
+        fontSize: 14,
+        minHeight: 100,
+        textAlignVertical: 'top',
+        marginBottom: 16,
+    },
+    dietAiBtn: {
+        flexDirection: 'row',
+        backgroundColor: Colors.primary,
+        padding: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+    },
+    dietAiBtnText: {
+        color: '#fff',
+        fontWeight: '800',
     },
     foodItem: {
         padding: 16,
@@ -1169,166 +1303,5 @@ const styles = StyleSheet.create({
     closeBtnText: {
         color: Colors.text,
         fontWeight: '700',
-    },
-    aiFeedbackContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: 'rgba(255, 107, 53, 0.05)',
-        padding: 8,
-        borderRadius: 8,
-        marginTop: 8,
-    },
-    aiFeedbackText: {
-        color: Colors.primary,
-        fontSize: 12,
-        fontWeight: '600',
-        flex: 1,
-    },
-    modalFooter: {
-        flexDirection: 'row',
-        gap: 12,
-        marginTop: 10,
-    },
-    btnSecondary: {
-        flex: 1,
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        padding: 14,
-        borderRadius: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    btnSecondaryText: {
-        color: Colors.text,
-        fontSize: 16,
-        fontWeight: '700',
-    },
-    // AI & DIET ENHANCEMENTS
-    dietAiContainer: {
-        marginTop: 10,
-    },
-    dietAiCard: {
-        padding: 24,
-    },
-    dietAiTitle: {
-        color: Colors.text,
-        fontSize: 22,
-        fontWeight: '900',
-        textAlign: 'center',
-        marginBottom: 8,
-    },
-    dietAiSubtitle: {
-        color: Colors.textSecondary,
-        fontSize: 14,
-        textAlign: 'center',
-        marginBottom: 24,
-        lineHeight: 20,
-    },
-    dietAiInput: {
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        borderRadius: 16,
-        padding: 16,
-        color: Colors.text,
-        fontSize: 16,
-        minHeight: 120,
-        textAlignVertical: 'top',
-        marginBottom: 20,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-    },
-    dietAiBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 10,
-        backgroundColor: Colors.primary,
-        padding: 18,
-        borderRadius: 16,
-    },
-    dietAiBtnText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '800',
-    },
-    logMealType: {
-        color: Colors.primary,
-        fontSize: 12,
-        fontWeight: '800',
-        textTransform: 'uppercase',
-        marginBottom: 2,
-    },
-    logCalories: {
-        color: Colors.text,
-        fontSize: 16,
-        fontWeight: '800',
-    },
-    modalSubtitle: {
-        color: Colors.textSecondary,
-        fontSize: 14,
-        marginBottom: 20,
-    },
-    aiInputModal: {
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        borderRadius: 12,
-        padding: 16,
-        color: Colors.text,
-        fontSize: 16,
-        minHeight: 80,
-        textAlignVertical: 'top',
-        marginBottom: 16,
-    },
-    aiLogBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        backgroundColor: Colors.primary,
-        padding: 14,
-        borderRadius: 12,
-        marginBottom: 20,
-    },
-    aiLogBtnText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '700',
-    },
-    orText: {
-        color: Colors.textMuted,
-        fontSize: 12,
-        fontWeight: '900',
-        textAlign: 'center',
-        marginBottom: 16,
-    },
-    label: {
-        color: Colors.textMuted,
-        fontSize: 12,
-        fontWeight: '800',
-        marginBottom: 4,
-    },
-    formGroup: {
-        marginBottom: 16,
-    },
-    header: {
-        padding: 24,
-        paddingTop: 40,
-        backgroundColor: Colors.surface,
-    },
-    title: {
-        fontSize: 24,
-        fontWeight: '900',
-        color: Colors.text,
-        marginBottom: 20,
-    },
-    tabContainer: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    modalInput: {
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        borderRadius: 12,
-        padding: 16,
-        color: Colors.text,
-        fontSize: 16,
-        marginBottom: 12,
-    },
+    }
 });

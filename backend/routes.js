@@ -205,12 +205,13 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             db.from('leaderboard').select('*, users(full_name, nickname, profile_photo_url, kvkk_mask)').eq('category', 'attendance').order('monthly_visits', { ascending: false }).limit(5),
             db.from('leaderboard').select('*, users(full_name, nickname, profile_photo_url, kvkk_mask)').eq('category', 'strength_bench').order('monthly_visits', { ascending: false }).limit(5),
             db.from('user_badges').select('*, badges(*)').eq('user_id', userId),
-            db.from('qr_codes').select('qr_token').eq('user_id', userId).eq('is_active', true).limit(1).maybeSingle(),
-            db.from('notifications').select('id', { count: 'exact' }).eq('user_id', userId).eq('is_read', false)
+            db.from('notifications').select('id', { count: 'exact' }).eq('user_id', userId).eq('is_read', false),
+            db.from('installments').select('*').eq('user_id', userId).order('due_date', { ascending: true })
         ]);
 
         const user = userRes.data;
         let membership = membershipRes.data;
+        const installments = installmentRes.data || [];
 
         if (membership && membership.end_date) {
             const todayAtMidnight = new Date();
@@ -275,14 +276,14 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             const in7DaysStr = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
             const in14DaysStr = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-            const [memCount, activeCount, revSum, expiring1, expiring7, expiring14] = await Promise.all([
+            const [memCount, activeCount, revSum, expiring1, expiring7, expiring14, pendingInstallments] = await Promise.all([
                 db.from('users').select('id', { count: 'exact', head: true }).eq('role', 'member'),
                 db.from('memberships').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-                // Only sum revenue from last 2000 memberships to avoid memory issues (compromise for now)
                 db.from('memberships').select('amount').order('created_at', { ascending: false }).limit(2000),
                 db.from('memberships').select('id', { count: 'exact', head: true }).eq('status', 'active').lte('end_date', in1DayStr).gte('end_date', todayStr),
                 db.from('memberships').select('id', { count: 'exact', head: true }).eq('status', 'active').lte('end_date', in7DaysStr).gte('end_date', todayStr),
                 db.from('memberships').select('id', { count: 'exact', head: true }).eq('status', 'active').lte('end_date', in14DaysStr).gte('end_date', todayStr),
+                db.from('installments').select('*, users(full_name)').eq('status', 'pending').order('due_date', { ascending: true }).limit(20)
             ]);
 
             adminStats = {
@@ -291,7 +292,8 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
                 totalRevenue: (revSum.data || []).reduce((acc, curr) => acc + (curr.amount || 0), 0),
                 expiringIn1Day: expiring1.count || 0,
                 expiringIn7Days: expiring7.count || 0,
-                expiringIn14Days: expiring14.count || 0
+                expiringIn14Days: expiring14.count || 0,
+                pendingInstallments: pendingInstallments.data || []
             };
         }
 
@@ -299,7 +301,19 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
         if (user && user.role === 'trainer') {
             const { data: students } = await db.from('workout_programs').select('users(id, full_name, profile_photo_url, email)').eq('assigned_by', userId).eq('is_active', true);
             const uniqueStudents = Array.from(new Map((students || []).map(s => [s.users.id, s.users])).values());
-            trainerStats = { activeStudents: uniqueStudents.length, students: uniqueStudents };
+            const studentIds = uniqueStudents.map(s => s.id);
+
+            let pendingInst = [];
+            if (studentIds.length > 0) {
+                const { data } = await db.from('installments').select('*, users(full_name)').in('user_id', studentIds).eq('status', 'pending').order('due_date', { ascending: true });
+                pendingInst = data || [];
+            }
+
+            trainerStats = {
+                activeStudents: uniqueStudents.length,
+                students: uniqueStudents,
+                pendingInstallments: pendingInst
+            };
         }
 
         // Get live occupancy from check_ins
@@ -308,7 +322,10 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
         res.json({
             user,
             membership,
-            occupancy: occRes.data || { current_count: 0, max_capacity: 100 },
+            occupancy: {
+                current_count: liveOccupancy || 0,
+                max_capacity: occRes.data?.max_capacity || 100
+            },
             liveOccupancy: liveOccupancy || 0,
             heatmap: heatmapRes.data || [],
             todayWorkout,
@@ -319,6 +336,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             badges: badgeRes.data || [],
             qrCode: qrRes.data?.qr_token || null,
             unreadNotifications: notifRes.count || 0,
+            installments,
             adminStats,
             trainerStats,
         });
@@ -367,6 +385,38 @@ router.post('/checkin', authMiddleware, async (req, res) => {
 
         await db.from('check_ins').insert({ user_id: userId, check_in_time: new Date().toISOString() });
 
+        // STREAK & BADGE LOGIC
+        const todayStr = new Date().toISOString().split('T')[0];
+        const { data: user } = await db.from('users').select('current_streak, best_streak, last_activity_date').eq('id', userId).single();
+
+        let newStreak = user?.current_streak || 0;
+        const lastDate = user?.last_activity_date ? new Date(user.last_activity_date) : null;
+        const today = new Date(todayStr);
+
+        if (!lastDate || (today - lastDate) / (1000 * 60 * 60 * 24) === 1) {
+            newStreak += 1;
+        } else if ((today - lastDate) / (1000 * 60 * 60 * 24) > 1) {
+            newStreak = 1;
+        }
+
+        if (!lastDate || todayStr !== user.last_activity_date) {
+            const newBest = Math.max(newStreak, user?.best_streak || 0);
+            await db.from('users').update({
+                current_streak: newStreak,
+                best_streak: newBest,
+                last_activity_date: todayStr
+            }).eq('id', userId);
+
+            // Badge check
+            const milestones = [10, 30, 50, 100];
+            if (milestones.includes(newStreak)) {
+                const { data: badge } = await db.from('badges').select('id').eq('requirement_value', newStreak).maybeSingle();
+                if (badge) {
+                    await db.from('user_badges').upsert({ user_id: userId, badge_id: badge.id });
+                }
+            }
+        }
+
         const { data: lastOcc } = await db.from('gym_occupancy').select('current_count').order('recorded_at', { ascending: false }).limit(1).maybeSingle();
         const newCount = (lastOcc?.current_count || 0) + 1;
         await db.from('gym_occupancy').insert({
@@ -376,7 +426,7 @@ router.post('/checkin', authMiddleware, async (req, res) => {
             day_of_week: ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][new Date().getDay()]
         });
 
-        res.json({ message: 'Giriş başarılı!' });
+        res.json({ message: 'Giriş başarılı! 🔥', current_streak: newStreak });
     } catch (err) {
         console.error('Checkin Error:', err);
         res.status(500).json({ error: 'Giriş başarısız' });
@@ -557,7 +607,15 @@ router.get('/pr-records', authMiddleware, async (req, res) => {
 
 router.get('/measurements', authMiddleware, async (req, res) => {
     try {
-        const { data } = await getDb().from('body_measurements').select('*').eq('user_id', req.user.id).order('measured_at', { ascending: false });
+        const { user_id } = req.query;
+        const targetId = user_id || req.user.id;
+
+        // If trainer/admin is requesting another user's measurements, check permissions
+        if (targetId !== req.user.id && req.user.role === 'member') {
+            return res.status(403).json({ error: 'Yetkiniz yok' });
+        }
+
+        const { data } = await getDb().from('body_measurements').select('*').eq('user_id', targetId).order('measured_at', { ascending: false });
         res.json(data || []);
     } catch (err) {
         res.status(500).json({ error: 'Yüklenemedi' });
@@ -595,10 +653,43 @@ router.post('/tasks/:id/complete', authMiddleware, async (req, res) => {
 
 router.post('/measurements', authMiddleware, async (req, res) => {
     try {
-        const { weight_kg, body_fat_pct } = req.body;
-        const { data } = await getDb().from('body_measurements').insert({ user_id: req.user.id, weight_kg, body_fat_pct, measured_at: new Date().toISOString().split('T')[0] }).select().single();
+        const {
+            user_id, weight_kg, body_fat_pct,
+            height_cm, shoulder_cm, bicep_cm,
+            waist_cm, chest_cm, neck_cm, thigh_cm, hips_cm
+        } = req.body;
+
+        const targetId = user_id || req.user.id;
+
+        // Permission check: Trainers/Admins can add for others, members only for themselves
+        if (targetId !== req.user.id && !['admin', 'trainer', 'superadmin'].includes(req.user.role)) {
+            return res.status(403).json({ error: 'Yetkiniz yok' });
+        }
+
+        const { data, error } = await getDb().from('body_measurements').insert({
+            user_id: targetId,
+            weight_kg,
+            body_fat_pct,
+            height_cm,
+            shoulder_cm,
+            bicep_cm,
+            waist_cm,
+            chest_cm,
+            neck_cm,
+            thigh_cm,
+            hips_cm,
+            measured_at: new Date().toISOString().split('T')[0]
+        }).select().single();
+
+        if (error) throw error;
+
+        if (targetId !== req.user.id) {
+            await logAudit('MEASUREMENT_ADDED_BY_STAFF', req.user.id, targetId, { weight_kg });
+        }
+
         res.json(data);
     } catch (err) {
+        console.error('Measurement Error:', err);
         res.status(500).json({ error: 'Kaydedilemedi' });
     }
 });
@@ -904,6 +995,49 @@ router.put('/admin/payments/:id/approve', authMiddleware, requireRole('admin'), 
     }
 });
 
+router.put('/admin/installments/:id/pay', authMiddleware, requireRole('admin', 'trainer'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const db = getDb();
+
+        // 1. Get installment info
+        const { data: inst, error: fetchError } = await db.from('installments').select('*').eq('id', id).single();
+        if (fetchError || !inst) return res.status(404).json({ error: 'Taksit bulunamadı' });
+
+        if (inst.status === 'paid') return res.status(400).json({ error: 'Taksit zaten ödenmiş' });
+
+        // 2. Mark as paid
+        const { data: updatedInst, error: updateError } = await db.from('installments').update({
+            status: 'paid',
+            paid_at: new Date().toISOString()
+        }).eq('id', id).select().single();
+
+        if (updateError) throw updateError;
+
+        // 3. Update membership paid amount
+        if (inst.membership_id) {
+            const { data: mem } = await db.from('memberships').select('amount').eq('id', inst.membership_id).single();
+            if (mem) {
+                await db.from('memberships').update({
+                    amount: (mem.amount || 0) + inst.amount
+                }).eq('id', inst.membership_id);
+            }
+        }
+
+        // 4. Create Audit Log
+        await logAudit('INSTALLMENT_PAID', req.user.id, inst.user_id, {
+            installment_id: id,
+            amount: inst.amount,
+            membership_id: inst.membership_id
+        });
+
+        res.json({ message: 'Taksit ödemesi onaylandı', installment: updatedInst });
+    } catch (err) {
+        console.error('Installment Pay Error:', err);
+        res.status(500).json({ error: 'Taksit onaylanamadı' });
+    }
+});
+
 router.get('/admin/payments', authMiddleware, requireRole('admin'), async (req, res) => {
     try {
         const { limit = 50, offset = 0, user_id } = req.query;
@@ -1201,18 +1335,12 @@ router.get('/admin/user-nutrition/:id', authMiddleware, requireRole('admin', 'tr
 
 router.post('/nutrition/ai-log-meal', authMiddleware, async (req, res) => {
     try {
-        const { text } = req.body;
+        // Find how many meals the user logged today
+        const { text, mealType } = req.body;
         const db = getDb();
         const today = new Date().toISOString().split('T')[0];
 
-        // Find how many meals the user logged today
-        const { count } = await db.from('nutrition_logs')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', req.user.id)
-            .eq('log_date', today);
-
-        const nextMealNumber = (count || 0) + 1;
-        const mealTypeStr = `${nextMealNumber}. Öğün`;
+        const mealTypeStr = mealType || 'Öğün';
 
         if (!process.env.GEMINI_API_KEY) {
             console.warn("GEMINI_API_KEY missing. Using mock AI response.");
@@ -1247,13 +1375,15 @@ router.post('/nutrition/ai-log-meal', authMiddleware, async (req, res) => {
         - Hedef: ${userStats?.goal || 'Bilinmiyor'}
 
         Lütfen bu ifadeden yola çıkarak porsiyon tahmini yap ve besin değerlerini (protein, karbonhidrat, yağ ve toplam kalori) hesapla.
+        Ayrıca bu öğünü kullanıcının fiziğine ve hedefine göre değerlendir. Eğer protein veya kalori çok düşükse mutlaka "UYARI:" ile başlayan bir cümle ekle.
+
         Sadece JSON formatında cevap dön. JSON formatı kesinlikle şu olmalı:
         {
           "protein_g": sayi,
           "carbs_g": sayi, 
           "fat_g": sayi, 
           "calories": sayi, 
-          "feedback": "Türkçe kısa tavsiye ve analiz (Örn: Bu öğün hedefine göre biraz yüksek kalorili, akşam daha hafif geçirmelisin)"
+          "feedback": "Türkçe kısa tavsiye ve analiz. Örn: 'Bu öğün protein açısından zayıf kalmış. UYARI: Kas gelişimi için bir sonraki öğünde protein miktarını artırmalısın.'"
         }
         Cevabın sadece JSON objesi olsun, markdown blockları içermesin.`;
 

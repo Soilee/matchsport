@@ -103,13 +103,29 @@ export interface PRRecord {
 
 export interface BodyMeasurement {
     id: string;
+    user_id: string;
     weight_kg: number;
     body_fat_pct: number;
-    chest_cm: number;
-    waist_cm: number;
-    arm_cm: number;
-    leg_cm: number;
+    height_cm?: number;
+    shoulder_cm?: number;
+    bicep_cm?: number;
+    waist_cm?: number;
+    chest_cm?: number;
+    neck_cm?: number;
+    thigh_cm?: number;
+    hips_cm?: number;
     measured_at: string;
+}
+
+export interface Installment {
+    id: string;
+    user_id: string;
+    membership_id: string | null;
+    amount: number;
+    due_date: string;
+    status: 'pending' | 'paid' | 'overdue';
+    paid_at?: string;
+    created_at: string;
 }
 
 export interface Announcement {
@@ -149,6 +165,7 @@ export interface DashboardData {
     badges: Badge[];
     qrCode: string | null;
     unreadNotifications: number;
+    installments: Installment[];
     adminStats?: {
         totalMembers: number;
         activeMembers: number;

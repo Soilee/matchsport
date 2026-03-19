@@ -107,6 +107,7 @@ export default function ProfileScreen() {
             <SafeAreaView style={styles.container}>
                 <ScrollView
                     contentContainerStyle={[styles.scrollContent, { flexGrow: 1 }]}
+                    keyboardShouldPersistTaps="handled"
                     keyboardDismissMode="on-drag"
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
                 >
@@ -196,72 +197,78 @@ export default function ProfileScreen() {
                     </View>
                 </ScrollView>
 
-                {/* Password Modal */}
                 <Modal visible={passwordModalVisible} transparent animationType="fade">
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.modalContent}>
-                            <Text style={styles.modalTitle}>Şifre Değiştir</Text>
-                            <TextInput
-                                style={styles.modalInput}
-                                placeholder="Mevcut Şifre"
-                                placeholderTextColor="#666"
-                                secureTextEntry
-                                value={currentPassword}
-                                onChangeText={setCurrentPassword}
-                            />
-                            <TextInput
-                                style={styles.modalInput}
-                                placeholder="Yeni Şifre"
-                                placeholderTextColor="#666"
-                                secureTextEntry
-                                value={newPassword}
-                                onChangeText={setNewPassword}
-                            />
-                            <View style={styles.modalButtons}>
-                                <TouchableOpacity style={styles.cancelBtn} onPress={() => setPasswordModalVisible(false)}>
-                                    <Text style={styles.cancelText}>İptal</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.saveBtn} onPress={handlePasswordChange}>
-                                    <Text style={styles.saveText}>Güncelle</Text>
-                                </TouchableOpacity>
-                            </View>
+                    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                        <View style={styles.modalOverlay}>
+                            <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                                <View style={styles.modalContent}>
+                                    <Text style={styles.modalTitle}>Şifre Değiştir</Text>
+                                    <TextInput
+                                        style={styles.modalInput}
+                                        placeholder="Mevcut Şifre"
+                                        placeholderTextColor="#666"
+                                        secureTextEntry
+                                        value={currentPassword}
+                                        onChangeText={setCurrentPassword}
+                                    />
+                                    <TextInput
+                                        style={styles.modalInput}
+                                        placeholder="Yeni Şifre"
+                                        placeholderTextColor="#666"
+                                        secureTextEntry
+                                        value={newPassword}
+                                        onChangeText={setNewPassword}
+                                    />
+                                    <View style={styles.modalButtons}>
+                                        <TouchableOpacity style={styles.cancelBtn} onPress={() => setPasswordModalVisible(false)}>
+                                            <Text style={styles.cancelText}>İptal</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity style={styles.saveBtn} onPress={handlePasswordChange}>
+                                            <Text style={styles.saveText}>Güncelle</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            </TouchableWithoutFeedback>
                         </View>
-                    </View>
+                    </TouchableWithoutFeedback>
                 </Modal>
 
-                {/* Profile Edit Modal */}
                 <Modal visible={profileModalVisible} transparent animationType="fade">
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.modalContent}>
-                            <Text style={styles.modalTitle}>Profili Düzenle</Text>
-                            <Text style={styles.inputLabel}>Boy (cm)</Text>
-                            <TextInput
-                                style={styles.modalInput}
-                                keyboardType="numeric"
-                                value={editHeight}
-                                onChangeText={setEditHeight}
-                                placeholder={data?.user?.height_cm?.toString() || '180'}
-                                placeholderTextColor="#666"
-                            />
-                            <Text style={styles.inputLabel}>Kilo (kg)</Text>
-                            <TextInput
-                                style={styles.modalInput}
-                                keyboardType="numeric"
-                                value={editWeight}
-                                onChangeText={setEditWeight}
-                                placeholder={data?.user?.weight_kg?.toString() || '80'}
-                                placeholderTextColor="#666"
-                            />
-                            <View style={styles.modalButtons}>
-                                <TouchableOpacity style={styles.cancelBtn} onPress={() => setProfileModalVisible(false)}>
-                                    <Text style={styles.cancelText}>İptal</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.saveBtn} onPress={handleProfileUpdate}>
-                                    <Text style={styles.saveText}>Kaydet</Text>
-                                </TouchableOpacity>
-                            </View>
+                    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                        <View style={styles.modalOverlay}>
+                            <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                                <View style={styles.modalContent}>
+                                    <Text style={styles.modalTitle}>Profili Düzenle</Text>
+                                    <Text style={styles.inputLabel}>Boy (cm)</Text>
+                                    <TextInput
+                                        style={styles.modalInput}
+                                        keyboardType="numeric"
+                                        value={editHeight}
+                                        onChangeText={setEditHeight}
+                                        placeholder={data?.user?.height_cm?.toString() || '180'}
+                                        placeholderTextColor="#666"
+                                    />
+                                    <Text style={styles.inputLabel}>Kilo (kg)</Text>
+                                    <TextInput
+                                        style={styles.modalInput}
+                                        keyboardType="numeric"
+                                        value={editWeight}
+                                        onChangeText={setEditWeight}
+                                        placeholder={data?.user?.weight_kg?.toString() || '80'}
+                                        placeholderTextColor="#666"
+                                    />
+                                    <View style={styles.modalButtons}>
+                                        <TouchableOpacity style={styles.cancelBtn} onPress={() => setProfileModalVisible(false)}>
+                                            <Text style={styles.cancelText}>İptal</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity style={styles.saveBtn} onPress={handleProfileUpdate}>
+                                            <Text style={styles.saveText}>Kaydet</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            </TouchableWithoutFeedback>
                         </View>
-                    </View>
+                    </TouchableWithoutFeedback>
                 </Modal>
             </SafeAreaView>
         </TouchableWithoutFeedback>

@@ -1,18 +1,19 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import Card from '@/components/common/Card';
-import { Membership } from '@/types';
+import { Membership, Installment } from '@/types';
 import { router } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface Props {
     membership: Membership | null;
+    installments?: Installment[];
 }
 
-export default function MembershipCard({ membership }: Props) {
+export default function MembershipCard({ membership, installments = [] }: Props) {
     if (!membership) {
         return (
             <Card style={styles.emptyCard}>
@@ -27,13 +28,18 @@ export default function MembershipCard({ membership }: Props) {
 
     const { remaining_days, total_days, status, package_type, end_date } = membership;
 
-    // SVG Circular Progress Logic
+    // Calculate real debt from installments
+    const pendingInstallments = installments.filter(i => i.status !== 'paid');
+    const totalDebt = pendingInstallments.reduce((acc, i) => acc + i.amount, 0);
+    const nextInstallment = pendingInstallments[0]; // Already sorted by date in backend
+
+    // SVG Circular Progress Logic - DRAINS BACKWARDS
     const size = 100;
     const strokeWidth = 8;
     const radius = (size - strokeWidth) / 2;
     const circumference = radius * 2 * Math.PI;
     const progress = Math.min(1, Math.max(0, remaining_days / (total_days || 30)));
-    const strokeDashoffset = circumference - progress * circumference;
+    const strokeDashoffset = circumference - (progress * circumference);
 
     const getStatusConfig = () => {
         switch (status) {
@@ -52,9 +58,11 @@ export default function MembershipCard({ membership }: Props) {
 
     const config = getStatusConfig();
 
+    const strokeColor = remaining_days <= 14 ? '#FF3B30' : config.color;
+
     return (
         <TouchableOpacity activeOpacity={0.9} onPress={() => router.push('/membershipDetail' as any)}>
-            <View style={[styles.container, { borderColor: config.color }]}>
+            <View style={[styles.container, { borderColor: strokeColor }]}>
                 <LinearGradient
                     colors={['rgba(255,107,53,0.1)', 'rgba(0,0,0,0.4)']}
                     style={styles.gradient}
@@ -87,7 +95,7 @@ export default function MembershipCard({ membership }: Props) {
                                     cx={size / 2}
                                     cy={size / 2}
                                     r={radius}
-                                    stroke={config.color}
+                                    stroke={strokeColor}
                                     strokeWidth={strokeWidth}
                                     fill="none"
                                     strokeDasharray={`${circumference} ${circumference}`}
@@ -97,7 +105,7 @@ export default function MembershipCard({ membership }: Props) {
                                 />
                             </Svg>
                             <View style={styles.gaugeCenter}>
-                                <Text style={[styles.daysText, { color: config.color }]}>{remaining_days}</Text>
+                                <Text style={[styles.daysText, { color: strokeColor }]}>{remaining_days}</Text>
                                 <Text style={styles.daysLabel}>KALAN GÜN</Text>
                             </View>
                         </View>
@@ -108,13 +116,28 @@ export default function MembershipCard({ membership }: Props) {
                                 <Text style={styles.infoValue}>{end_date}</Text>
                             </View>
                             <View style={styles.infoRow}>
-                                <Text style={styles.infoLabel}>Toplam Süre</Text>
-                                <Text style={styles.infoValue}>{total_days} Gün</Text>
+                                <Text style={styles.infoLabel}>Bakiye / Borç</Text>
+                                <Text style={[styles.infoValue, { color: totalDebt > 0 ? '#FF3B30' : '#34C759' }]}>
+                                    {totalDebt > 0 ? `₺${totalDebt} Borç` : 'Borcunuz Yoktur'}
+                                </Text>
                             </View>
-                            <View style={styles.progressTrack}>
-                                <View style={[styles.progressBar, { width: `${progress * 100}%`, backgroundColor: config.color }]} />
-                            </View>
+                            {nextInstallment && (
+                                <View style={styles.infoRow}>
+                                    <View>
+                                        <Text style={styles.infoLabel}>Sonraki Ödeme</Text>
+                                        <Text style={styles.subInfoLabel}>
+                                            {new Date(nextInstallment.due_date).toLocaleDateString('tr-TR')}
+                                        </Text>
+                                    </View>
+                                    <Text style={[styles.infoValue, { color: '#FF3B30' }]}>
+                                        ₺{nextInstallment.amount}
+                                    </Text>
+                                </View>
+                            )}
                         </View>
+                    </View>
+                    <View style={styles.progressTrack}>
+                        <View style={[styles.progressBar, { width: `${progress * 100}%`, backgroundColor: strokeColor }]} />
                     </View>
                 </LinearGradient>
             </View>
@@ -238,4 +261,10 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: 'white',
     },
+    subInfoLabel: {
+        color: '#8E8E93',
+        fontSize: 10,
+        fontWeight: '500',
+        marginTop: 2,
+    }
 });

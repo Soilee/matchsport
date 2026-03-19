@@ -1,19 +1,58 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import Card from '@/components/common/Card';
 import { Ionicons } from '@expo/vector-icons';
+import { adminPayInstallment } from '@/services/api';
+
+interface Installment {
+    id: string;
+    amount: number;
+    due_date: string;
+    users?: { full_name: string };
+}
 
 interface Props {
     trainerStats: {
         activeStudents: number;
         students: any[];
+        pendingInstallments?: Installment[];
     };
+    onRefresh?: () => void;
 }
 
-export default function TrainerDashboard({ trainerStats }: Props) {
+export default function TrainerDashboard({ trainerStats, onRefresh }: Props) {
+    const [approvingId, setApprovingId] = useState<string | null>(null);
+
+    const handleApprove = async (id: string) => {
+        Alert.alert(
+            'Ödeme Onayı',
+            'Bu taksit ödemesini onaylıyor musunuz?',
+            [
+                { text: 'İptal', style: 'cancel' },
+                {
+                    text: 'Onayla',
+                    onPress: async () => {
+                        setApprovingId(id);
+                        try {
+                            await adminPayInstallment(id);
+                            Alert.alert('Başarılı', 'Taksit ödemesi onaylandı.');
+                            if (onRefresh) onRefresh();
+                        } catch (err) {
+                            Alert.alert('Hata', 'Ödeme onaylanırken bir sorun oluştu.');
+                        } finally {
+                            setApprovingId(null);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const pending = trainerStats.pendingInstallments || [];
+
     return (
-        <View style={styles.container}>
+        <ScrollView style={styles.container} scrollEnabled={false}>
             <Text style={styles.headerTitle}>Eğitmen Paneli</Text>
 
             <Card title="Özet" style={styles.summaryCard} glow>
@@ -25,20 +64,48 @@ export default function TrainerDashboard({ trainerStats }: Props) {
                     </View>
                     <View style={styles.divider} />
                     <View style={styles.statItem}>
-                        <Ionicons name="calendar" size={24} color={Colors.info} />
-                        <Text style={styles.statVal}>3</Text>
-                        <Text style={styles.statLab}>Bugünkü Dersler</Text>
+                        <Ionicons name="card-outline" size={24} color={Colors.warning} />
+                        <Text style={styles.statVal}>{pending.length}</Text>
+                        <Text style={styles.statLab}>Bekleyen Ödeme</Text>
                     </View>
                 </View>
             </Card>
+
+            {/* NEW: Pending Installments Approval */}
+            {pending.length > 0 && (
+                <Card title="Onay Bekleyen Taksitler" style={styles.installmentCard}>
+                    {pending.map((inst) => (
+                        <View key={inst.id} style={styles.installmentRow}>
+                            <View style={styles.instInfo}>
+                                <Text style={styles.instUser}>{inst.users?.full_name || 'Öğrenci'}</Text>
+                                <Text style={styles.instDate}>{new Date(inst.due_date).toLocaleDateString('tr-TR')} Vadeli</Text>
+                            </View>
+                            <View style={styles.instAction}>
+                                <Text style={styles.instAmount}>₺{inst.amount}</Text>
+                                <TouchableOpacity
+                                    style={styles.approveBtn}
+                                    onPress={() => handleApprove(inst.id)}
+                                    disabled={approvingId === inst.id}
+                                >
+                                    {approvingId === inst.id ? (
+                                        <ActivityIndicator size="small" color="white" />
+                                    ) : (
+                                        <Text style={styles.approveBtnText}>Onayla</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    ))}
+                </Card>
+            )}
 
             <Text style={styles.sectionTitle}>Öğrencilerim</Text>
 
             {trainerStats.students.length === 0 ? (
                 <Text style={styles.emptyText}>Henüz size atanmış bir öğrenci yok.</Text>
             ) : (
-                trainerStats.students.map((student, idx) => (
-                    <Card key={student.id} style={styles.studentCard} padding={16}>
+                trainerStats.students.map((student) => (
+                    <Card key={student.id} style={[styles.studentCard, { padding: 16 }] as any}>
                         <View style={styles.studentHeader}>
                             <View style={styles.avatar}>
                                 <Ionicons name="person" size={20} color={Colors.primary} />
@@ -62,7 +129,7 @@ export default function TrainerDashboard({ trainerStats }: Props) {
                     </Card>
                 ))
             )}
-        </View>
+        </ScrollView>
     );
 }
 
@@ -117,6 +184,50 @@ const styles = StyleSheet.create({
     },
     studentCard: {
         marginBottom: 12,
+    },
+    installmentCard: {
+        marginBottom: 12,
+    },
+    installmentRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.05)',
+    },
+    instInfo: {
+        flex: 1,
+    },
+    instUser: {
+        color: Colors.text,
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    instDate: {
+        color: Colors.textMuted,
+        fontSize: 12,
+        marginTop: 2,
+    },
+    instAction: {
+        alignItems: 'flex-end',
+        gap: 8,
+    },
+    instAmount: {
+        color: Colors.primary,
+        fontSize: 16,
+        fontWeight: '800',
+    },
+    approveBtn: {
+        backgroundColor: Colors.success,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+    },
+    approveBtnText: {
+        color: 'white',
+        fontSize: 12,
+        fontWeight: '800',
     },
     studentHeader: {
         flexDirection: 'row',
