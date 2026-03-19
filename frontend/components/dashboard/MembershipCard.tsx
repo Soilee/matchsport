@@ -115,12 +115,14 @@ export default function MembershipCard({ membership, installments = [] }: Props)
                                 <Text style={styles.infoLabel}>Bitiş Tarihi</Text>
                                 <Text style={styles.infoValue}>{end_date}</Text>
                             </View>
-                            <View style={styles.infoRow}>
-                                <Text style={styles.infoLabel}>Bakiye / Borç</Text>
-                                <Text style={[styles.infoValue, { color: totalDebt > 0 ? '#FF3B30' : '#34C759' }]}>
-                                    {totalDebt > 0 ? `₺${totalDebt} Borç` : 'Borcunuz Yoktur'}
-                                </Text>
-                            </View>
+                            {totalDebt > 0 && (
+                                <View style={styles.infoRow}>
+                                    <Text style={styles.infoLabel}>Kalan Ödeme</Text>
+                                    <Text style={[styles.infoValue, { color: '#FF9F0A' }]}>
+                                        ₺{totalDebt}
+                                    </Text>
+                                </View>
+                            )}
                             {nextInstallment && (
                                 <View style={styles.infoRow}>
                                     <View>

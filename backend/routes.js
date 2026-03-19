@@ -736,10 +736,11 @@ router.put('/admin/users/:id', authMiddleware, requireRole('admin'), async (req,
     }
 });
 
-// Delete member
+// Delete member (with optional cascade)
 router.delete('/admin/users/:id', authMiddleware, requireRole('admin'), async (req, res) => {
     try {
         const { id } = req.params;
+        const cascade = req.query.cascade === 'true';
         const db = getDb();
 
         // Get user info before deleting for audit
@@ -758,16 +759,49 @@ router.delete('/admin/users/:id', authMiddleware, requireRole('admin'), async (r
         await logAudit('USER_DELETED', req.user.id, id, {
             deleted_user: userToDelete.full_name,
             deleted_email: userToDelete.email,
-            deleted_role: userToDelete.role
+            deleted_role: userToDelete.role,
+            cascade
         });
+
+        if (cascade) {
+            // Delete all related data from all tables
+            const tables = [
+                'installments', 'payments', 'nutrition_logs', 'ai_macro_logs',
+                'body_measurements', 'diet_plans', 'check_ins',
+                'notifications', 'user_badges', 'qr_codes',
+                'pr_records', 'leaderboard'
+            ];
+            for (const table of tables) {
+                try {
+                    await db.from(table).delete().eq('user_id', id);
+                } catch (e) { /* table may not exist, ignore */ }
+            }
+            // Delete workout exercises -> days -> programs
+            try {
+                const { data: programs } = await db.from('workout_programs').select('id').eq('user_id', id);
+                if (programs && programs.length > 0) {
+                    const programIds = programs.map(p => p.id);
+                    const { data: days } = await db.from('workout_days').select('id').in('program_id', programIds);
+                    if (days && days.length > 0) {
+                        await db.from('workout_exercises').delete().in('workout_day_id', days.map(d => d.id));
+                        await db.from('workout_days').delete().in('program_id', programIds);
+                    }
+                    await db.from('workout_programs').delete().eq('user_id', id);
+                }
+            } catch (e) { /* ignore */ }
+            // Delete memberships last (they may have FK references)
+            try { await db.from('memberships').delete().eq('user_id', id); } catch (e) { }
+            // Delete audit logs where this user is the target
+            try { await db.from('audit_logs').delete().eq('target_user_id', id); } catch (e) { }
+        }
 
         const { error } = await db.from('users').delete().eq('id', id);
         if (error) throw error;
 
-        res.json({ message: 'Kullanıcı silindi' });
+        res.json({ message: 'Kullanıcı ve tüm ilişkili veriler silindi' });
     } catch (err) {
         console.error('Delete User Error:', err);
-        res.status(500).json({ error: 'Silme başarısız' });
+        res.status(500).json({ error: 'Silme başarısız: ' + (err.message || 'Bilinmeyen hata') });
     }
 });
 
@@ -941,10 +975,14 @@ router.post('/admin/payments', authMiddleware, requireRole('admin', 'trainer'), 
         const remainingDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
         if (current) {
+            // Calculate total_days from start_date to new end_date
+            const startDate = new Date(current.start_date || current.created_at);
+            const totalDays = Math.ceil((newEnd - startDate) / (1000 * 60 * 60 * 24));
             await db.from('memberships').update({
                 end_date: newEnd.toISOString().split('T')[0],
                 status: 'active',
                 remaining_days: remainingDays,
+                total_days: totalDays,
                 package_type: package_type || current.package_type,
                 amount: (current.amount || 0) + paidAmount
             }).eq('id', current.id);
@@ -1228,7 +1266,8 @@ router.post('/admin/tasks', authMiddleware, requireRole('admin', 'trainer'), asy
 router.post('/admin/announcements', authMiddleware, requireRole('admin'), async (req, res) => {
     try {
         const { title, content, type } = req.body;
-        const { data } = await getDb().from('announcements').insert({
+        const db = getDb();
+        const { data } = await db.from('announcements').insert({
             created_by: req.user.id,
             title,
             body: content,
@@ -1237,6 +1276,27 @@ router.post('/admin/announcements', authMiddleware, requireRole('admin'), async 
         }).select().single();
 
         await logAudit('ANNOUNCEMENT_CREATED', req.user.id, null, { title });
+
+        // Push in-app notification to all active members
+        try {
+            const { data: activeMembers } = await db.from('memberships')
+                .select('user_id')
+                .eq('status', 'active');
+
+            if (activeMembers && activeMembers.length > 0) {
+                const notifications = activeMembers.map(m => ({
+                    user_id: m.user_id,
+                    title: `\uD83D\uDCE2 ${title}`,
+                    body: content || '',
+                    type: 'announcement',
+                    is_read: false
+                }));
+                await db.from('notifications').insert(notifications);
+            }
+        } catch (notifErr) {
+            console.error('Notification push failed:', notifErr);
+            // Don't fail the main request
+        }
 
         res.json(data);
     } catch (err) {

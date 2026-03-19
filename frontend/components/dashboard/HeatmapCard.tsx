@@ -42,7 +42,7 @@ export default function HeatmapCard({ data }: Props) {
                 <Text style={styles.title}>Yoğunluk Haritası</Text>
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled={true} contentContainerStyle={{ paddingRight: 20 }}>
                 <View>
                     {/* Hour labels */}
                     <View style={styles.row}>

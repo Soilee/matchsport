@@ -208,7 +208,7 @@ export default function ProgressScreen() {
             </ScrollView>
 
             {/* Entry Modal */}
-            <Modal visible={isModalVisible} animationType="slide" transparent={true}>
+            <Modal visible={isModalVisible} animationType="slide" transparent={true} onRequestClose={() => setIsModalVisible(false)}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
@@ -218,7 +218,7 @@ export default function ProgressScreen() {
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView style={styles.modalForm}>
+                        <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false}>
                             <View style={styles.inputGroup}>
                                 <Text style={styles.inputLabel}>Kilo (kg) *</Text>
                                 <TextInput

@@ -153,6 +153,8 @@ export default function DashboardScreen() {
           contentContainerStyle={[styles.scrollContent, { flexGrow: 1 }]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
         >
           {data && (
@@ -200,30 +202,27 @@ export default function DashboardScreen() {
                 </Card>
               )}
 
-              {/* DEBT WIDGET */}
+              {/* KALAN ÖDEME WIDGET - only visible if pending installments exist */}
               {(() => {
-                const membership = data?.membership;
-                if (!membership) return null;
-                const remainingDebt = (membership.total_price || 0) - (membership.amount || 0);
-                if (remainingDebt > 0) {
-                  return (
-                    <Card style={StyleSheet.flatten([styles.membershipCard, { backgroundColor: 'rgba(255, 59, 48, 0.1)', borderColor: 'rgba(255, 59, 48, 0.3)', borderWidth: 1 }])} glow>
-                      <View style={styles.membershipContent}>
-                        <View>
-                          <Text style={[styles.membershipLabel, { color: '#FF3B30' }]}>Kalan Borcunuz</Text>
-                          <Text style={[styles.membershipDays, { color: '#FF3B30' }]}>₺{remainingDebt}</Text>
-                          <Text style={[styles.membershipExpiry, { color: '#FF3B30' }]}>
-                            Son Ödeme: {membership.next_payment_date ? new Date(membership.next_payment_date).toLocaleDateString('tr-TR') : 'Belirtilmedi'}
+                const pendingInst = (data?.installments || []).filter((i: any) => i.status !== 'paid');
+                const totalPending = pendingInst.reduce((s: number, i: any) => s + (i.amount || 0), 0);
+                if (totalPending <= 0) return null;
+                const nextDue = pendingInst[0];
+                return (
+                  <Card style={StyleSheet.flatten([styles.membershipCard, { backgroundColor: 'rgba(255, 159, 10, 0.08)', borderColor: 'rgba(255, 159, 10, 0.25)', borderWidth: 1 }])}>
+                    <View style={styles.membershipContent}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.membershipLabel, { color: '#FF9F0A' }]}>Kalan Ödeme</Text>
+                        <Text style={[styles.membershipDays, { color: '#FF9F0A', fontSize: 24 }]}>₺{totalPending}</Text>
+                        {nextDue && (
+                          <Text style={[styles.membershipExpiry, { color: '#FF9F0A' }]}>
+                            Sonraki Taksit: {new Date(nextDue.due_date).toLocaleDateString('tr-TR')}
                           </Text>
-                        </View>
-                        <View style={[styles.membershipBadge, { backgroundColor: 'rgba(255, 59, 48, 0.2)' }]}>
-                          <Ionicons name="warning-outline" size={40} color="#FF3B30" />
-                        </View>
+                        )}
                       </View>
-                    </Card>
-                  );
-                }
-                return null;
+                    </View>
+                  </Card>
+                );
               })()}
 
               <MembershipCard

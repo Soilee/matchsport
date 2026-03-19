@@ -231,12 +231,13 @@ const App = () => {
   };
 
   const handleDeleteUser = async (user) => {
-    if (!confirm(`"${user.full_name}" silinecek. Emin misiniz?`)) return;
+    const confirmed = confirm(`"${user.full_name}" silinecek.\n\nBu işlem geri alınamaz! İlgili tüm veriler silinecektir:\n• Üyelik bilgileri\n• Ödeme ve taksit kayıtları\n• Beslenme ve diyet logları\n• Ölçüm verileri\n• Antrenman programları\n• Turnike geçiş kayıtları\n• Sistem logları\n\nDevam etmek istiyor musunuz?`);
+    if (!confirmed) return;
     try {
-      const res = await fetch(`${API_URL}/admin/users/${user.id}`, { method: 'DELETE', headers });
+      const res = await fetch(`${API_URL}/admin/users/${user.id}?cascade=true`, { method: 'DELETE', headers });
       const d = await res.json();
       if (d.error) alert('Hata: ' + d.error);
-      else { alert('Kullanıcı silindi'); fetchData(); }
+      else { alert('Kullanıcı ve tüm ilişkili veriler başarıyla silindi'); fetchData(); }
     } catch (e) { alert('Silme hatası'); }
   };
 
@@ -820,21 +821,36 @@ const App = () => {
                   </div>
                   <div className="form-group"><label>Açıklama / Notlar</label><textarea placeholder="Opsiyonel detaylar..." style={{ width: '100%', padding: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', minHeight: '80px' }} defaultValue={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}></textarea></div>
                   <div className="form-group">
-                    <label>Öğünler (JSON formatında)</label>
-                    <textarea
-                      placeholder='[{"name": "Sabah", "items": ["3 yumurta"]}]'
-                      style={{ width: '100%', padding: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', minHeight: '150px', fontFamily: 'monospace', fontSize: '0.8rem' }}
-                      value={formData.meals ? JSON.stringify(formData.meals, null, 2) : ''}
-                      onChange={e => {
-                        try {
-                          const parsed = JSON.parse(e.target.value);
-                          setFormData({ ...formData, meals: parsed });
-                        } catch (err) {
-                          // Allow typing, but maybe show error if invalid
-                          setFormData({ ...formData, _raw_meals: e.target.value });
-                        }
-                      }}
-                    ></textarea>
+                    <label>Öğünler</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                      {(formData.meals || [{ name: 'Sabah', items: [''] }, { name: 'Öğle', items: [''] }, { name: 'Akşam', items: [''] }]).map((meal, mIdx) => (
+                        <div key={mIdx} style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', borderLeft: '3px solid var(--primary)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <input type="text" placeholder={`${mIdx + 1}. Öğün Adı`} value={meal.name || ''}
+                              style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: 700, fontSize: '0.95rem', outline: 'none', flex: 1 }}
+                              onChange={e => { const m = [...(formData.meals || [{ name: 'Sabah', items: [''] }, { name: 'Öğle', items: [''] }, { name: 'Akşam', items: [''] }])]; m[mIdx] = { ...m[mIdx], name: e.target.value }; setFormData({ ...formData, meals: m }); }}
+                            />
+                            <button type="button" style={{ color: '#FF3B30', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}
+                              onClick={() => { const m = [...(formData.meals || [])]; m.splice(mIdx, 1); setFormData({ ...formData, meals: m }); }}>×</button>
+                          </div>
+                          {(meal.items || ['']).map((item, iIdx) => (
+                            <div key={iIdx} style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.3rem', alignItems: 'center' }}>
+                              <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', width: '20px' }}>•</span>
+                              <input type="text" placeholder="Yemek adı (örn: 3 yumurta, 2 dilim tam buğday ekmek)" value={item}
+                                style={{ flex: 1, padding: '0.5rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', color: 'white', fontSize: '0.85rem' }}
+                                onChange={e => { const m = [...(formData.meals || [{ name: 'Sabah', items: [''] }, { name: 'Öğle', items: [''] }, { name: 'Akşam', items: [''] }])]; const items = [...(m[mIdx].items || [])]; items[iIdx] = e.target.value; m[mIdx] = { ...m[mIdx], items }; setFormData({ ...formData, meals: m }); }}
+                              />
+                              <button type="button" style={{ color: '#FF3B30', background: 'none', border: 'none', cursor: 'pointer' }}
+                                onClick={() => { const m = [...(formData.meals || [])]; const items = [...(m[mIdx].items || [])]; items.splice(iIdx, 1); m[mIdx] = { ...m[mIdx], items }; setFormData({ ...formData, meals: m }); }}>×</button>
+                            </div>
+                          ))}
+                          <button type="button" className="btn-action" style={{ fontSize: '0.75rem', marginTop: '0.3rem' }}
+                            onClick={() => { const m = [...(formData.meals || [{ name: 'Sabah', items: [''] }, { name: 'Öğle', items: [''] }, { name: 'Akşam', items: [''] }])]; m[mIdx] = { ...m[mIdx], items: [...(m[mIdx].items || []), ''] }; setFormData({ ...formData, meals: m }); }}>+ Yemek Ekle</button>
+                        </div>
+                      ))}
+                      <button type="button" className="btn-action" style={{ alignSelf: 'flex-start' }}
+                        onClick={() => { const m = [...(formData.meals || [])]; m.push({ name: `${m.length + 1}. Öğün`, items: [''] }); setFormData({ ...formData, meals: m }); }}>+ Yeni Öğün Ekle</button>
+                    </div>
                   </div>
                 </>)}
                 {modal.type === 'announcement' && (
@@ -1032,11 +1048,12 @@ const MemberInstallmentView = ({ userId }) => {
 
   useEffect(() => { fetchInst(); }, [userId]);
 
+  const [confirmPayId, setConfirmPayId] = useState(null);
   const handlePay = async (id) => {
-    if (!window.confirm('Bu taksiti ödendi olarak işaretlemek istiyor musunuz?')) return;
     try {
       const token = localStorage.getItem('token');
       await fetch(`${API_URL}/admin/pay-installment/${id}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+      setConfirmPayId(null);
       fetchInst();
     } catch (e) { alert('Hata oluştu'); }
   };
@@ -1045,20 +1062,30 @@ const MemberInstallmentView = ({ userId }) => {
   if (installments.length === 0) return <p style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-dim)' }}>Taksit kaydı bulunamadı.</p>;
 
   return (
-    <div className="table-container mini-table">
-      <table>
-        <thead><tr><th>Vade</th><th>Tutar</th><th>Durum</th><th>İşlem</th></tr></thead>
-        <tbody>
-          {installments.map(i => (
-            <tr key={i.id}>
-              <td>{new Date(i.due_date).toLocaleDateString('tr-TR')}</td>
-              <td>₺{i.amount}</td>
-              <td><span className={`badge badge-${i.status === 'paid' ? 'active' : 'expired'}`}>{i.status === 'paid' ? 'ÖDENDİ' : 'BEKLEYEN'}</span></td>
-              <td>{i.status === 'pending' && <button type="button" className="btn-action" style={{ color: '#34C759' }} onClick={() => handlePay(i.id)}>Öde</button>}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div style={{ width: '100%' }}>
+      {confirmPayId && (
+        <div style={{ background: 'rgba(52,199,89,0.1)', border: '1px solid rgba(52,199,89,0.3)', padding: '1rem', borderRadius: '10px', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: '#34C759', fontWeight: 600 }}>Bu taksiti ödendi olarak işaretle?</span>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="button" className="btn-primary" style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }} onClick={() => handlePay(confirmPayId)}>✓ Onayla</button>
+            <button type="button" className="btn-secondary" style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }} onClick={() => setConfirmPayId(null)}>İptal</button>
+          </div>
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+        {installments.map(i => (
+          <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.8rem 1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', borderLeft: i.status === 'paid' ? '3px solid #34C759' : '3px solid #FF3B30' }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{new Date(i.due_date).toLocaleDateString('tr-TR')}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>₺{i.amount}</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+              <span className={`badge badge-${i.status === 'paid' ? 'active' : 'expired'}`}>{i.status === 'paid' ? 'ÖDENDİ' : 'BEKLEYEN'}</span>
+              {i.status === 'pending' && <button type="button" className="btn-action" style={{ color: '#34C759' }} onClick={() => setConfirmPayId(i.id)}>Öde</button>}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

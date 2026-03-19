@@ -18,6 +18,7 @@ export default function WorkoutsScreen() {
     const [days, setDays] = useState<WorkoutDay[]>([]);
     const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
     const [diet, setDiet] = useState<DietPlan | null>(null);
+    const [originalDiet, setOriginalDiet] = useState<DietPlan | null>(null);
     const [manualWorkouts, setManualWorkouts] = useState<any[]>([]);
 
     // Nutrition State
@@ -329,6 +330,15 @@ export default function WorkoutsScreen() {
                             )}
                         </TouchableOpacity>
                     </Card>
+                    {originalDiet && (
+                        <TouchableOpacity
+                            style={[styles.dietAiBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: Colors.textMuted, marginTop: 12, marginHorizontal: 20 }]}
+                            onPress={() => { setDiet(originalDiet); setOriginalDiet(null); }}
+                        >
+                            <Ionicons name="arrow-back" size={18} color={Colors.textMuted} />
+                            <Text style={[styles.dietAiBtnText, { color: Colors.textMuted }]}>Vazgeç</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             );
         }
@@ -394,7 +404,7 @@ export default function WorkoutsScreen() {
                     <>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                             <Text style={styles.sectionTitle}>Öğünler</Text>
-                            <TouchableOpacity onPress={() => setDiet(null)}>
+                            <TouchableOpacity onPress={() => { setOriginalDiet(diet); setDiet(null); }}>
                                 <Text style={{ color: Colors.primary, fontSize: 12 }}>Planı Değiştir</Text>
                             </TouchableOpacity>
                         </View>
