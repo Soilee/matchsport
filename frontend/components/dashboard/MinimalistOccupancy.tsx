@@ -8,7 +8,7 @@ interface Props {
     maxCapacity: number;
 }
 
-export default function MinimalistOccupancy({ currentCount, maxCapacity }: Props) {
+const MinimalistOccupancy = React.memo(({ currentCount, maxCapacity }: Props) => {
     const percentage = (currentCount / maxCapacity) * 100;
 
     const getStatus = () => {
@@ -29,7 +29,9 @@ export default function MinimalistOccupancy({ currentCount, maxCapacity }: Props
             </View>
         </Card>
     );
-}
+});
+
+export default MinimalistOccupancy;
 
 const styles = StyleSheet.create({
     card: {

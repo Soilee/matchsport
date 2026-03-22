@@ -503,6 +503,101 @@ router.post('/checkout', authMiddleware, async (req, res) => {
     }
 });
 
+// =================== ADVANCED ADMIN STATS (PHASE 3) ===================
+
+router.get('/admin/stats-advanced', authMiddleware, requireRole('admin'), async (req, res) => {
+    try {
+        const db = getDb();
+
+        // 1. Revenue trend (Last 6 months)
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+        sixMonthsAgo.setDate(1);
+
+        const { data: memberships } = await db.from('memberships')
+            .select('amount, created_at')
+            .gte('created_at', sixMonthsAgo.toISOString());
+
+        const { data: installments } = await db.from('installments')
+            .select('amount, payment_date')
+            .eq('status', 'paid')
+            .gte('payment_date', sixMonthsAgo.toISOString());
+
+        // Group by month
+        const monthlyRevenue = {};
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date();
+            d.setMonth(d.getMonth() - i);
+            const monthKey = d.toLocaleString('tr-TR', { month: 'short', year: 'numeric' });
+            monthlyRevenue[monthKey] = 0;
+        }
+
+        (memberships || []).forEach(m => {
+            const date = new Date(m.created_at);
+            const key = date.toLocaleString('tr-TR', { month: 'short', year: 'numeric' });
+            if (monthlyRevenue[key] !== undefined) {
+                monthlyRevenue[key] += Number(m.amount || 0);
+            }
+        });
+
+        (installments || []).forEach(i => {
+            if (i.payment_date) {
+                const date = new Date(i.payment_date);
+                const key = date.toLocaleString('tr-TR', { month: 'short', year: 'numeric' });
+                if (monthlyRevenue[key] !== undefined) {
+                    monthlyRevenue[key] += Number(i.amount || 0);
+                }
+            }
+        });
+
+        const revenueData = Object.keys(monthlyRevenue).map(k => ({
+            name: k,
+            revenue: monthlyRevenue[k]
+        }));
+
+        // 2. User Retention & Status
+        const { data: allMemberships } = await db.from('memberships').select('status');
+        const statusCounts = { active: 0, expired: 0, frozen: 0 };
+        (allMemberships || []).forEach(m => {
+            if (m.status === 'active') statusCounts.active++;
+            else if (m.status === 'frozen') statusCounts.frozen++;
+            else statusCounts.expired++;
+        });
+        const retentionData = [
+            { name: 'Aktif', value: statusCounts.active, color: '#34C759' },
+            { name: 'Süresi Biten', value: statusCounts.expired, color: '#FF3B30' },
+            { name: 'Dondurulmuş', value: statusCounts.frozen, color: '#FF9F0A' }
+        ];
+
+        // 3. Debt vs Paid Analysis
+        let totalMembershipPaid = 0;
+        let totalMembershipDebt = 0;
+        const { data: memsForDebt } = await db.from('memberships').select('amount, total_price');
+        (memsForDebt || []).forEach(m => {
+            totalMembershipPaid += Number(m.amount || 0);
+            const debt = Number(m.total_price || 0) - Number(m.amount || 0);
+            if (debt > 0) totalMembershipDebt += debt;
+        });
+
+        const debtData = [
+            { name: 'Tahsil Edilen', value: totalMembershipPaid, color: '#34C759' },
+            { name: 'Bekleyen Alacak (Borç)', value: totalMembershipDebt, color: '#FF453A' }
+        ];
+
+        res.json({
+            revenueData,
+            retentionData,
+            debtData,
+            totalActive: statusCounts.active,
+            totalRevenue: totalMembershipPaid
+        });
+
+    } catch (err) {
+        console.error('Stats Advanced Error:', err);
+        res.status(500).json({ error: 'Gelişmiş istatistikler yüklenemedi' });
+    }
+});
+
 // =================== TURNSTILE ADMIN ===================
 
 router.get('/admin/turnstile/logs', authMiddleware, requireRole('admin'), async (req, res) => {

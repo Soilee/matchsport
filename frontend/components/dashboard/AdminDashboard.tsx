@@ -62,7 +62,7 @@ export default function AdminDashboard({ adminStats, occupancy, onRefresh }: Pro
     const pending = adminStats.pendingInstallments || [];
 
     return (
-        <ScrollView style={styles.container} scrollEnabled={false}>
+        <View style={styles.container}>
             <Text style={styles.headerTitle}>Yönetim Özeti</Text>
 
             <View style={styles.gridRow}>
@@ -136,7 +136,7 @@ export default function AdminDashboard({ adminStats, occupancy, onRefresh }: Pro
                     </Svg>
                 </View>
             </Card>
-        </ScrollView>
+        </View>
     );
 }
 

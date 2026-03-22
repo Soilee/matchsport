@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabase';
-import { Users, CreditCard, Activity, TrendingUp, Search, Bell, Settings, LogOut, Dumbbell, Layout, CheckSquare, UserPlus, ShieldCheck, Key, Trash2, Edit, DollarSign, Menu, X } from 'lucide-react';
+import { Users, CreditCard, Activity, TrendingUp, Search, Bell, Settings, LogOut, Dumbbell, Layout, CheckSquare, UserPlus, ShieldCheck, Key, Trash2, Edit, DollarSign, Menu, X, PieChart as PieChartIcon } from 'lucide-react';
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import './App.css';
 
 const API_URL = 'https://matchsport.onrender.com/api';
@@ -130,6 +131,7 @@ const App = () => {
   const [turnstileConfig, setTurnstileConfig] = useState({ enabled: false, message: '' });
   const [confirmDeleteUser, setConfirmDeleteUser] = useState(null);
   const [loginError, setLoginError] = useState('');
+  const [advancedStats, setAdvancedStats] = useState(null);
 
   const token = localStorage.getItem('token');
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
@@ -148,7 +150,15 @@ const App = () => {
     if (activeView === 'finance' && isAdmin) fetchFinance();
     if (activeView === 'audit' && isAdmin) fetchAuditLogs();
     if (activeView === 'turnstile' && isAdmin) fetchTurnstile();
+    if (activeView === 'analytics' && isAdmin) fetchAdvancedStats();
   }, [activeView]);
+
+  async function fetchAdvancedStats() {
+    try {
+      const res = await fetch(`${API_URL}/admin/stats-advanced`, { headers });
+      setAdvancedStats(await res.json());
+    } catch (e) { console.error('Error fetching advanced stats', e); }
+  }
 
   async function fetchTurnstile() {
     try {
@@ -247,18 +257,14 @@ const App = () => {
     setConfirmDeleteUser(null);
   };
 
-  const openModal = async (type, data = null) => {
+  const openModal = async (type, data = null, initialData = {}) => {
     setModal({ show: true, type, data });
-    // Preserving actionType if it was set before openModal (e.g. by 'Subtract' button)
-    if (type === 'add-days' && formData.actionType === 'subtract') {
-      // Keep it
-    } else {
-      setFormData({});
-    }
+    setFormData(initialData);
+
     if (type === 'diet' && data) {
       try {
         const { data: d } = await supabase.from('diet_plans').select('*').eq('user_id', data.id).eq('is_active', true).maybeSingle();
-        if (d) setFormData({ ...d });
+        if (d) setFormData(prev => ({ ...prev, ...d }));
       } catch (e) { console.error('Diet fetch error', e); }
     }
   };
@@ -422,6 +428,7 @@ const App = () => {
           {(isAdmin || isSuperAdmin) && (<>
             <button className={`nav-item ${activeView === 'turnstile' ? 'active' : ''}`} onClick={() => setActiveView('turnstile')}><ShieldCheck size={20} /> Turnike Yönetimi</button>
             <button className={`nav-item ${activeView === 'finance' ? 'active' : ''}`} onClick={() => setActiveView('finance')}><CreditCard size={20} /> Finansal</button>
+            <button className={`nav-item ${activeView === 'analytics' ? 'active' : ''}`} onClick={() => setActiveView('analytics')}><PieChartIcon size={20} /> Gelişmiş Analizler</button>
             {isSuperAdmin && <button className={`nav-item ${activeView === 'audit' ? 'active' : ''}`} onClick={() => setActiveView('audit')}><Activity size={20} /> Aktivite Kayıtları</button>}
           </>)}
         </nav>
@@ -435,7 +442,7 @@ const App = () => {
       <main className="content">
         <header className="content-header">
           <div className="header-left">
-            <h1>{activeView === 'dashboard' ? 'Dashboard' : activeView === 'members' ? 'Üye Yönetimi' : activeView === 'trainers' ? 'Eğitmen Yönetimi' : activeView === 'tasks' ? 'Görev Yönetimi' : activeView === 'finance' ? 'Finansal Yönetim' : activeView === 'audit' ? 'Aktivite Kayıtları' : 'Ayarlar'}</h1>
+            <h1>{activeView === 'dashboard' ? 'Dashboard' : activeView === 'members' ? 'Üye Yönetimi' : activeView === 'trainers' ? 'Eğitmen Yönetimi' : activeView === 'tasks' ? 'Görev Yönetimi' : activeView === 'finance' ? 'Finansal Yönetim' : activeView === 'audit' ? 'Aktivite Kayıtları' : activeView === 'analytics' ? 'Gelişmiş Analizler' : 'Ayarlar'}</h1>
             <p className="subtitle">Hoş geldin, {currentUser?.full_name || 'Yönetici'} ({roleLabel})</p>
           </div>
           <div className="header-actions">
@@ -459,6 +466,70 @@ const App = () => {
           </div>
           <HeatmapComponent data={heatmapData} />
         </>)}
+
+        {/* ANALYTICS VIEW */}
+        {activeView === 'analytics' && isAdmin && (
+          <div className="analytics-view">
+            {!advancedStats ? (
+              <div style={{ textAlign: 'center', padding: '3rem' }}><Activity color="#FF3B30" size={48} className="spin" /></div>
+            ) : (
+              <>
+                <div className="stats-grid" style={{ marginBottom: '2rem' }}>
+                  <StatCard icon={<TrendingUp color="#34C759" />} label="Toplam Tahsilat" value={`₺${(advancedStats.totalRevenue || 0).toLocaleString()}`} sub="Sisteme giren nakit" />
+                  <StatCard icon={<Users color="var(--primary)" />} label="Aktif Üyeler" value={advancedStats.totalActive || 0} sub="Geçerli/Devam Eden" />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem' }}>
+                  <div className="chart-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '1.5rem', borderRadius: '12px' }}>
+                    <h3 style={{ marginBottom: '1.5rem', color: 'white' }}>Aylık Gelir Trendi (Son 6 Ay)</h3>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={advancedStats.revenueData || []}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                        <XAxis dataKey="name" stroke="var(--text-dim)" />
+                        <YAxis stroke="var(--text-dim)" tickFormatter={(val) => `₺${val}`} />
+                        <Tooltip contentStyle={{ backgroundColor: '#1E1E2E', border: 'none', borderRadius: '8px' }} />
+                        <Legend />
+                        <Line type="monotone" dataKey="revenue" name="Tahsilat (₺)" stroke="#34C759" strokeWidth={3} dot={{ r: 5 }} activeDot={{ r: 8 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="chart-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '1.5rem', borderRadius: '12px' }}>
+                    <h3 style={{ marginBottom: '1.5rem', color: 'white' }}>Üye Durum Dağılımı (Retention)</h3>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie data={advancedStats.retentionData || []} cx="50%" cy="50%" innerRadius={70} outerRadius={100} paddingAngle={5} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                          {(advancedStats.retentionData || []).map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={{ backgroundColor: '#1E1E2E', border: 'none', borderRadius: '8px' }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="chart-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '1.5rem', borderRadius: '12px', gridColumn: '1 / -1' }}>
+                    <h3 style={{ marginBottom: '1.5rem', color: 'white' }}>Tahsilat vs Bekleyen Alacak Analizi</h3>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={advancedStats.debtData || []} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                        <XAxis type="number" stroke="var(--text-dim)" />
+                        <YAxis dataKey="name" type="category" stroke="var(--text-dim)" width={150} />
+                        <Tooltip contentStyle={{ backgroundColor: '#1E1E2E', border: 'none', borderRadius: '8px' }} formatter={(val) => `₺${val}`} />
+                        <Legend />
+                        <Bar dataKey="value" name="Tutar (₺)" radius={[0, 4, 4, 0]} maxBarSize={40}>
+                          {(advancedStats.debtData || []).map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {/* TURNSTILE LOGS & CONFIG */}
         {activeView === 'turnstile' && isAdmin && (
@@ -527,11 +598,12 @@ const App = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <h3>Tüm Üyeler ({members.length})</h3>
                 <div className="filter-bar" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <button className={`btn-filter ${filterType === 'all' ? 'active' : ''}`} onClick={() => setFilterType('all')}>Tümü</button>
+                  <button className={`btn-filter ${filterType === 'all' ? 'active' : ''}`} onClick={() => setFilterType('all')}>Aktif Üyeler</button>
                   <button className={`btn-filter ${filterType === 'exp1' ? 'active' : ''}`} onClick={() => setFilterType('exp1')}>1 Gün Kalan</button>
                   <button className={`btn-filter ${filterType === 'exp7' ? 'active' : ''}`} onClick={() => setFilterType('exp7')}>7 Gün</button>
                   <button className={`btn-filter ${filterType === 'exp14' ? 'active' : ''}`} onClick={() => setFilterType('exp14')}>14 Gün</button>
-                  <button className={`btn-filter ${filterType === 'debt' ? 'active' : ''}`} style={{ borderColor: '#FF3B30', color: filterType === 'debt' ? 'white' : '#FF3B30', background: filterType === 'debt' ? '#FF3B30' : 'transparent' }} onClick={() => setFilterType('debt')}>Borcu Olanlar</button>
+                  <button className={`btn-filter ${filterType === 'expired' ? 'active' : ''}`} style={{ borderColor: '#FF3B30', color: filterType === 'expired' ? 'white' : '#FF3B30', background: filterType === 'expired' ? '#FF3B30' : 'transparent' }} onClick={() => setFilterType('expired')}>Süresi Bitenler</button>
+                  <button className={`btn-filter ${filterType === 'debt' ? 'active' : ''}`} style={{ borderColor: '#FF9F0A', color: filterType === 'debt' ? 'white' : '#FF9F0A', background: filterType === 'debt' ? '#FF9F0A' : 'transparent' }} onClick={() => setFilterType('debt')}>Borcu Olanlar</button>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -567,9 +639,12 @@ const App = () => {
                       const debt = (membership?.total_price || 0) - (membership?.amount || 0);
                       return debt > 0;
                     }
-                    if (filterType === 'exp1') return remainingDays <= 1;
-                    if (filterType === 'exp7') return remainingDays <= 7;
-                    if (filterType === 'exp14') return remainingDays <= 14;
+                    if (filterType === 'expired') return remainingDays <= 0;
+                    if (filterType === 'exp1') return remainingDays <= 1 && remainingDays > 0;
+                    if (filterType === 'exp7') return remainingDays <= 7 && remainingDays > 0;
+                    if (filterType === 'exp14') return remainingDays <= 14 && remainingDays > 0;
+                    // Default 'all' filter now excludes expired members
+                    if (filterType === 'all') return remainingDays > 0;
                     return true;
                   })
                   .sort((a, b) => {
@@ -583,33 +658,17 @@ const App = () => {
                     return valB - valA;
                   })
                   .map(m => (
-                    <tr key={m.id}>
-                      <td><div style={{ fontWeight: 700 }}>{m.full_name}</div><div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{m.email}</div></td>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{formatPackageName(m.memberships?.[0]?.package_type)}</div>
-                        {(m.memberships?.[0]?.total_price - m.memberships?.[0]?.amount > 0) &&
-                          <div style={{ fontSize: '0.7rem', color: '#FF3B30', fontWeight: 'bold' }}>Borç: ₺{m.memberships[0].total_price - m.memberships[0].amount}</div>
-                        }
-                      </td>
-                      <td>{calculateRemainingDays(m.memberships?.[0]?.end_date)} <span style={{ color: 'var(--text-dim)', fontSize: '0.7rem' }}>gün</span></td>
-                      <td><span className={`badge badge-${m.memberships?.[0]?.status || 'expired'}`}>{m.memberships?.[0]?.status === 'active' ? 'AKTİF' : m.memberships?.[0]?.status === 'frozen' ? 'DONDURULDU' : 'BİTTİ'}</span></td>
-                      <td><div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-                        <button className="btn-action" style={{ color: '#FF9F0A' }} onClick={() => handleStatusToggle(m.id, m.memberships?.[0]?.status)}>{m.memberships?.[0]?.status === 'frozen' ? 'Aktif' : 'Dondur'}</button>
-                        <button className="btn-action" style={{ color: '#34C759' }} onClick={() => openModal('payment', m)}>💰 Ödeme</button>
-                        <button className="btn-action" style={{ color: '#007AFF' }} onClick={() => openModal('installments', m)}>📊 Taksitler</button>
-                        <button className="btn-action" onClick={() => openModal('add-days', m)}>📅 Gün Ekle</button>
-                        <button className="btn-action" style={{ color: '#FF3B30' }} onClick={() => { setModal({ show: true, type: 'add-days', data: m }); setFormData({ actionType: 'subtract' }); }}>➖ Çıkar</button>
-                        <button className="btn-action" style={{ color: '#007AFF' }} onClick={() => openModal('user-logs', m)}>📂 Aktivite</button>
-                        {(isAdmin || isSuperAdmin) && (<>
-                          <button className="btn-action" onClick={() => openModal('nutrition-view', m)}>🍎 Beslenme</button>
-                          <button className="btn-action" onClick={() => openModal('diet', m)}>🥗 Diyet</button>
-                        </>)}
-                        <button className="btn-action" onClick={() => openModal('workout-assign', m)}>🏋️ Antrenman</button>
-                        <button className="btn-action" onClick={() => openModal('measurement', m)}>📐 Ölçüm</button>
-                        {(isAdmin || isSuperAdmin) && <button className="btn-action" onClick={() => openModal('reset-password', m)}><Key size={14} /></button>}
-                        {isSuperAdmin && <button className="btn-danger" onClick={() => handleDeleteUser(m)}><Trash2 size={14} /></button>}
-                      </div></td>
-                    </tr>
+                    <MemberRow
+                      key={m.id}
+                      m={m}
+                      isAdmin={isAdmin}
+                      isSuperAdmin={isSuperAdmin}
+                      openModal={openModal}
+                      handleStatusToggle={handleStatusToggle}
+                      handleDeleteUser={handleDeleteUser}
+                      calculateRemainingDays={calculateRemainingDays}
+                      formatPackageName={formatPackageName}
+                    />
                   ))}</tbody>
             </table>
           </div>
@@ -907,6 +966,7 @@ const App = () => {
                   <div className="form-group"><label>E-posta</label><input type="email" placeholder="ornek@email.com" required onChange={e => setFormData({ ...formData, email: e.target.value })} /></div>
                   <div className="form-group"><label>Şifre</label><input type="password" placeholder="Şifre" required onChange={e => setFormData({ ...formData, password: e.target.value })} /></div>
                   <div className="form-group"><label>Telefon</label><input type="text" placeholder="555..." onChange={e => setFormData({ ...formData, phone: e.target.value })} /></div>
+                  <div className="form-group"><label>Doğum Tarihi</label><input type="date" required={modal.type === 'add-member'} onChange={e => setFormData({ ...formData, birth_date: e.target.value })} /></div>
                 </>)}
                 <footer className="modal-footer">
                   <button type="button" className="btn-secondary" onClick={closeModal}>Vazgeç</button>
@@ -1131,7 +1191,7 @@ const MemberInstallmentView = ({ userId }) => {
   );
 };
 
-const StatCard = ({ icon, label, value, sub, variant, onClick }) => (
+const StatCard = React.memo(({ icon, label, value, sub, variant, onClick }) => (
   <div
     className={`stat-card ${variant ? `stat-${variant}` : ''}`}
     onClick={onClick}
@@ -1142,7 +1202,43 @@ const StatCard = ({ icon, label, value, sub, variant, onClick }) => (
     <div className="stat-value">{value}</div>
     {sub && <div className="stat-sub">{sub}</div>}
   </div>
-);
+));
+
+const MemberRow = React.memo(({ m, isAdmin, isSuperAdmin, openModal, handleStatusToggle, handleDeleteUser, calculateRemainingDays, formatPackageName }) => {
+  const membership = m.memberships?.[0];
+  const remainingDays = calculateRemainingDays(membership?.end_date);
+  const debt = (membership?.total_price || 0) - (membership?.amount || 0);
+
+  return (
+    <tr key={m.id}>
+      <td><div style={{ fontWeight: 700 }}>{m.full_name}</div><div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{m.email}</div></td>
+      <td>
+        <div style={{ fontWeight: 600 }}>{formatPackageName(membership?.package_type)}</div>
+        {debt > 0 &&
+          <div style={{ fontSize: '0.7rem', color: '#FF3B30', fontWeight: 'bold' }}>Borç: ₺{debt}</div>
+        }
+      </td>
+      <td>{remainingDays} <span style={{ color: 'var(--text-dim)', fontSize: '0.7rem' }}>gün</span></td>
+      <td><span className={`badge badge-${membership?.status || 'expired'}`}>{membership?.status === 'active' ? 'AKTİF' : membership?.status === 'frozen' ? 'DONDURULDU' : 'BİTTİ'}</span></td>
+      <td><div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+        <button className="btn-action" style={{ color: '#FF9F0A' }} onClick={() => handleStatusToggle(m.id, membership?.status)}>{membership?.status === 'frozen' ? 'Aktif' : 'Dondur'}</button>
+        <button className="btn-action" style={{ color: '#34C759' }} onClick={() => openModal('payment', m)}>💰 Ödeme</button>
+        <button className="btn-action" style={{ color: '#007AFF' }} onClick={() => openModal('installments', m)}>📊 Taksitler</button>
+        <button className="btn-action" onClick={() => openModal('add-days', m)}>📅 Gün Ekle</button>
+        <button className="btn-action" style={{ color: '#FF3B30' }} onClick={() => openModal('add-days', m, { actionType: 'subtract' })}>➖ Çıkar</button>
+        <button className="btn-action" style={{ color: '#007AFF' }} onClick={() => openModal('user-logs', m)}>📂 Aktivite</button>
+        {(isAdmin || isSuperAdmin) && (<>
+          <button className="btn-action" onClick={() => openModal('nutrition-view', m)}>🍎 Beslenme</button>
+          <button className="btn-action" onClick={() => openModal('diet', m)}>🥗 Diyet</button>
+        </>)}
+        <button className="btn-action" onClick={() => openModal('workout-assign', m)}>🏋️ Antrenman</button>
+        <button className="btn-action" onClick={() => openModal('measurement', m)}>📐 Ölçüm</button>
+        {(isAdmin || isSuperAdmin) && <button className="btn-action" onClick={() => openModal('reset-password', m)}><Key size={14} /></button>}
+        {isSuperAdmin && <button className="btn-danger" onClick={() => handleDeleteUser(m)}><Trash2 size={14} /></button>}
+      </div></td>
+    </tr>
+  );
+});
 
 const MemberLogsView = ({ userId }) => {
   const [logs, setLogs] = useState([]);

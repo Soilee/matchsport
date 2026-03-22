@@ -22,7 +22,7 @@ function getHeatColor(value: number, max: number): string {
     return '#FF3366';
 }
 
-export default function HeatmapCard({ data }: Props) {
+const HeatmapCard = React.memo(({ data }: Props) => {
     // Build a grid: days x hours
     const grid: Record<string, Record<number, number>> = {};
     let maxVal = 1;
@@ -94,7 +94,9 @@ export default function HeatmapCard({ data }: Props) {
             </View>
         </Card>
     );
-}
+});
+
+export default HeatmapCard;
 
 const styles = StyleSheet.create({
     header: {

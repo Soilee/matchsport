@@ -3,6 +3,7 @@ const cors = require('cors');
 const { initializeDatabase } = require('./database');
 const { seedDatabase } = require('./seed');
 const routes = require('./routes');
+const { startAutomation } = require('./automation');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -13,6 +14,7 @@ app.use(express.json());
 
 // Initialize DB and seed
 initializeDatabase();
+startAutomation();
 // seedDatabase(); // Disabled legacy seed, use supabase_seed.js instead
 // Routes
 app.use('/api', routes);

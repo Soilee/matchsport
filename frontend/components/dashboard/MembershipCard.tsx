@@ -13,7 +13,7 @@ interface Props {
     installments?: Installment[];
 }
 
-export default function MembershipCard({ membership, installments = [] }: Props) {
+const MembershipCard = React.memo(({ membership, installments = [] }: Props) => {
     if (!membership) {
         return (
             <Card style={styles.emptyCard}>
@@ -145,7 +145,9 @@ export default function MembershipCard({ membership, installments = [] }: Props)
             </View>
         </TouchableOpacity>
     );
-}
+});
+
+export default MembershipCard;
 
 const styles = StyleSheet.create({
     container: {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, ScrollView, View, Text, RefreshControl, ActivityIndicator, TouchableOpacity, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { StyleSheet, ScrollView, View, Text, RefreshControl, ActivityIndicator, TouchableOpacity, TouchableWithoutFeedback, Keyboard, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import Card from '@/components/common/Card';
@@ -46,10 +46,19 @@ export default function DashboardScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isAnnouncementsVisible, setIsAnnouncementsVisible] = useState(false);
   const lastFetch = useRef(0);
+  const reloadTimer = useRef<any>(null);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (isAuto = false) => {
     const now = Date.now();
-    if (now - lastFetch.current < 2000) return; // Rate limit 2s
+
+    // If this is an auto-refresh and we fetched recently, schedule it instead of skipping
+    if (isAuto && now - lastFetch.current < 3000) {
+      if (reloadTimer.current) clearTimeout(reloadTimer.current);
+      reloadTimer.current = setTimeout(() => loadData(true), 3000);
+      return;
+    }
+
+    if (reloadTimer.current) clearTimeout(reloadTimer.current);
     lastFetch.current = now;
 
     try {
@@ -93,7 +102,7 @@ export default function DashboardScreen() {
           filter: `user_id=eq.${userId}`
         }, (payload) => {
           console.log('Real-time: Membership updated!', payload);
-          loadData();
+          loadData(true);
         })
         .subscribe();
     });
@@ -107,7 +116,7 @@ export default function DashboardScreen() {
           table: 'gym_occupancy'
         }, (payload) => {
           console.log('Real-time: Occupancy changed!');
-          loadData();
+          loadData(true);
         })
         .subscribe();
     });
@@ -136,7 +145,7 @@ export default function DashboardScreen() {
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity onPress={loadData}>
+        <TouchableOpacity onPress={() => loadData()}>
           <Text style={styles.retryText}>Tekrar Dene</Text>
         </TouchableOpacity>
       </View>
@@ -146,182 +155,185 @@ export default function DashboardScreen() {
   const currentUserRole = data?.user?.role;
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <StatusBar style="light" />
-        <ScrollView
-          contentContainerStyle={[styles.scrollContent, { flexGrow: 1 }]}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          showsVerticalScrollIndicator={false}
-          scrollEventThrottle={16}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
-        >
-          {data && (
-            <>
-              {/* Header */}
-              <View style={styles.header}>
-                <View>
-                  <Text style={styles.greeting}>Merhaba, {data?.user?.full_name?.split(' ')[0] || 'Sporcu'} 👋</Text>
-                  <View style={styles.liveCounterContainer}>
-                    <View style={styles.livePulse} />
-                    <Text style={styles.liveCounterText}>Salonda Şu An: {data?.occupancy?.current_count || 0} Kişi Var</Text>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar style="light" />
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { flexGrow: 1 }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+      >
+        {data && (
+          <>
+            {/* Header */}
+            <View style={styles.header}>
+              <View>
+                <Text style={styles.greeting}>Merhaba, {data?.user?.full_name?.split(' ')[0] || 'Sporcu'} 👋</Text>
+                <View style={styles.liveCounterContainer}>
+                  <View style={styles.livePulse} />
+                  <Text style={styles.liveCounterText}>Salonda Şu An: {data?.occupancy?.current_count || 0} Kişi Var</Text>
+                </View>
+              </View>
+              <TouchableOpacity style={styles.notificationBtn} onPress={async () => {
+                setIsAnnouncementsVisible(true);
+                if (data?.unreadNotifications > 0) {
+                  try {
+                    const { markNotificationsRead } = require('@/services/api');
+                    await markNotificationsRead();
+                    setData(prev => prev ? { ...prev, unreadNotifications: 0 } : null);
+                  } catch (e) { console.error(e); }
+                }
+              }}>
+                <Ionicons name="notifications-outline" size={24} color={Colors.text} />
+                {(data?.unreadNotifications || 0) > 0 && (
+                  <View style={styles.notifBadge}>
+                    <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>
+                      {data.unreadNotifications > 9 ? '9+' : data.unreadNotifications}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* ADMIN/TRAINER DASHBOARDS */}
+            {currentUserRole === 'admin' && data.adminStats && (
+              <AdminDashboard
+                adminStats={data.adminStats}
+                occupancy={data.occupancy || { current_count: 0, max_capacity: 50 }}
+                onRefresh={loadData}
+              />
+            )}
+            {currentUserRole === 'trainer' && data.trainerStats && (
+              <TrainerDashboard
+                trainerStats={data.trainerStats}
+                onRefresh={loadData}
+              />
+            )}
+
+            {/* STREAK WIDGET */}
+            {(data?.user?.current_streak ?? 0) > 0 && (
+              <Card style={styles.streakCard} glow>
+                <View style={styles.streakContent}>
+                  <Text style={styles.streakIcon}>🔥</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.streakTitle}>Harika İlerliyorsun!</Text>
+                    <Text style={styles.streakDays}>{data.user.current_streak} Gündür Seridesin</Text>
                   </View>
                 </View>
-                <TouchableOpacity style={styles.notificationBtn} onPress={async () => {
-                  setIsAnnouncementsVisible(true);
-                  if (data?.unreadNotifications > 0) {
-                    try {
-                      const { markNotificationsRead } = require('@/services/api');
-                      await markNotificationsRead();
-                      setData(prev => prev ? { ...prev, unreadNotifications: 0 } : null);
-                    } catch (e) { console.error(e); }
-                  }
-                }}>
-                  <Ionicons name="notifications-outline" size={24} color={Colors.text} />
-                  {(data?.unreadNotifications || 0) > 0 && (
-                    <View style={styles.notifBadge}>
-                      <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>
-                        {data.unreadNotifications > 9 ? '9+' : data.unreadNotifications}
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
+              </Card>
+            )}
 
-              {/* ADMIN/TRAINER DASHBOARDS */}
-              {currentUserRole === 'admin' && data.adminStats && (
-                <AdminDashboard
-                  adminStats={data.adminStats}
-                  occupancy={data.occupancy || { current_count: 0, max_capacity: 50 }}
-                  onRefresh={loadData}
-                />
-              )}
-              {currentUserRole === 'trainer' && data.trainerStats && (
-                <TrainerDashboard
-                  trainerStats={data.trainerStats}
-                  onRefresh={loadData}
-                />
-              )}
-
-              {/* STREAK WIDGET */}
-              {(data?.user?.current_streak ?? 0) > 0 && (
-                <Card style={styles.streakCard} glow>
-                  <View style={styles.streakContent}>
-                    <Text style={styles.streakIcon}>🔥</Text>
+            {/* KALAN ÖDEME WIDGET - only visible if pending installments exist */}
+            {(() => {
+              const pendingInst = (data?.installments || []).filter((i: any) => i.status !== 'paid');
+              const totalPending = pendingInst.reduce((s: number, i: any) => s + (i.amount || 0), 0);
+              if (totalPending <= 0) return null;
+              const nextDue = pendingInst[0];
+              return (
+                <Card style={StyleSheet.flatten([styles.membershipCard, { backgroundColor: 'rgba(255, 159, 10, 0.08)', borderColor: 'rgba(255, 159, 10, 0.25)', borderWidth: 1 }])}>
+                  <View style={styles.membershipContent}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.streakTitle}>Harika İlerliyorsun!</Text>
-                      <Text style={styles.streakDays}>{data.user.current_streak} Gündür Seridesin</Text>
+                      <Text style={[styles.membershipLabel, { color: '#FF9F0A' }]}>Kalan Ödeme</Text>
+                      <Text style={[styles.membershipDays, { color: '#FF9F0A', fontSize: 24 }]}>₺{totalPending}</Text>
+                      {nextDue && (
+                        <Text style={[styles.membershipExpiry, { color: '#FF9F0A' }]}>
+                          Sonraki Taksit: {new Date(nextDue.due_date).toLocaleDateString('tr-TR')}
+                        </Text>
+                      )}
                     </View>
                   </View>
                 </Card>
-              )}
+              );
+            })()}
 
-              {/* KALAN ÖDEME WIDGET - only visible if pending installments exist */}
-              {(() => {
-                const pendingInst = (data?.installments || []).filter((i: any) => i.status !== 'paid');
-                const totalPending = pendingInst.reduce((s: number, i: any) => s + (i.amount || 0), 0);
-                if (totalPending <= 0) return null;
-                const nextDue = pendingInst[0];
-                return (
-                  <Card style={StyleSheet.flatten([styles.membershipCard, { backgroundColor: 'rgba(255, 159, 10, 0.08)', borderColor: 'rgba(255, 159, 10, 0.25)', borderWidth: 1 }])}>
-                    <View style={styles.membershipContent}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.membershipLabel, { color: '#FF9F0A' }]}>Kalan Ödeme</Text>
-                        <Text style={[styles.membershipDays, { color: '#FF9F0A', fontSize: 24 }]}>₺{totalPending}</Text>
-                        {nextDue && (
-                          <Text style={[styles.membershipExpiry, { color: '#FF9F0A' }]}>
-                            Sonraki Taksit: {new Date(nextDue.due_date).toLocaleDateString('tr-TR')}
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-                  </Card>
-                );
-              })()}
+            <MembershipCard
+              membership={data?.membership || null}
+              installments={data?.installments || []}
+            />
 
-              <MembershipCard
-                membership={data?.membership || null}
-                installments={data?.installments || []}
+            <MinimalistOccupancy
+              currentCount={data?.occupancy?.current_count || 0}
+              maxCapacity={data?.occupancy?.max_capacity || 50}
+            />
+
+            {data?.heatmap && <HeatmapCard data={data.heatmap} />}
+
+            {tasks.length > 0 && (
+              <DailyMission
+                task={tasks[0].title}
+                completed={tasks[0].is_completed}
+                onToggle={async () => {
+                  try {
+                    await completeTask(tasks[0].id);
+                    setTasks(prev => prev.map(t => t.id === tasks[0].id ? { ...t, is_completed: true } : t));
+                  } catch (e) {
+                    console.error('Task toggle error', e);
+                  }
+                }}
               />
+            )}
 
-              <MinimalistOccupancy
-                currentCount={data?.occupancy?.current_count || 0}
-                maxCapacity={data?.occupancy?.max_capacity || 50}
-              />
+            <ChecklistWorkout workout={data?.todayWorkout || null} />
 
-              {data?.heatmap && <HeatmapCard data={data.heatmap} />}
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Matchless Fitness v3.0</Text>
+            </View>
+          </>
+        )}
+      </ScrollView>
 
-              {tasks.length > 0 && (
-                <DailyMission
-                  task={tasks[0].title}
-                  completed={tasks[0].is_completed}
-                  onToggle={async () => {
-                    try {
-                      await completeTask(tasks[0].id);
-                      setTasks(prev => prev.map(t => t.id === tasks[0].id ? { ...t, is_completed: true } : t));
-                    } catch (e) {
-                      console.error('Task toggle error', e);
-                    }
-                  }}
-                />
-              )}
-
-              <ChecklistWorkout workout={data?.todayWorkout || null} />
-
-              <View style={styles.footer}>
-                <Text style={styles.footerText}>Matchless Fitness v3.0</Text>
-              </View>
-            </>
-          )}
-        </ScrollView>
-
-        {/* Announcements Modal */}
-        {isAnnouncementsVisible && (
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Duyurular</Text>
-                <TouchableOpacity onPress={() => setIsAnnouncementsVisible(false)}>
-                  <Ionicons name="close" size={24} color={Colors.text} />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView style={{ maxHeight: 500 }} showsVerticalScrollIndicator={false}>
-                {data?.announcements && data.announcements.length > 0 ? (
-                  data.announcements.map((ann) => (
-                    <Card key={ann.id} style={styles.announcementCard}>
-                      <View style={styles.annHeader}>
-                        <View style={[styles.annTypeBadge, { backgroundColor: ann.type === 'campaign' ? 'rgba(255, 107, 53, 0.1)' : 'rgba(52, 199, 89, 0.1)' }]}>
-                          <Text style={[styles.annTypeText, { color: ann.type === 'campaign' ? Colors.primary : '#34C759' }]}>
-                            {ann.type === 'campaign' ? 'Kampanya' : 'Bilgilendirme'}
-                          </Text>
-                        </View>
-                        <Text style={styles.annDate}>{new Date(ann.publish_at).toLocaleDateString('tr-TR')}</Text>
-                      </View>
-                      <Text style={styles.annTitle}>{ann.title}</Text>
-                      <Text style={styles.annBody}>{ann.body}</Text>
-                    </Card>
-                  ))
-                ) : (
-                  <View style={styles.emptyAnn}>
-                    <Ionicons name="notifications-off-outline" size={48} color={Colors.textMuted} />
-                    <Text style={styles.emptyAnnText}>Henüz bir duyuru bulunmuyor.</Text>
-                  </View>
-                )}
-              </ScrollView>
-
-              <TouchableOpacity
-                style={styles.modalCloseBtn}
-                onPress={() => setIsAnnouncementsVisible(false)}
-              >
-                <Text style={styles.modalCloseBtnText}>Kapat</Text>
+      {/* Announcements Modal */}
+      <Modal
+        visible={isAnnouncementsVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setIsAnnouncementsVisible(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: Colors.surface }}>
+          <View style={[styles.modalContent, { flex: 1, borderRadius: 0, padding: 20 }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Duyurular</Text>
+              <TouchableOpacity onPress={() => setIsAnnouncementsVisible(false)}>
+                <Ionicons name="close" size={24} color={Colors.text} />
               </TouchableOpacity>
             </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {data?.announcements && data.announcements.length > 0 ? (
+                data.announcements.map((ann) => (
+                  <Card key={ann.id} style={styles.announcementCard}>
+                    <View style={styles.annHeader}>
+                      <View style={[styles.annTypeBadge, { backgroundColor: ann.type === 'campaign' ? 'rgba(255, 107, 53, 0.1)' : 'rgba(52, 199, 89, 0.1)' }]}>
+                        <Text style={[styles.annTypeText, { color: ann.type === 'campaign' ? Colors.primary : '#34C759' }]}>
+                          {ann.type === 'campaign' ? 'Kampanya' : 'Bilgilendirme'}
+                        </Text>
+                      </View>
+                      <Text style={styles.annDate}>{new Date(ann.publish_at).toLocaleDateString('tr-TR')}</Text>
+                    </View>
+                    <Text style={styles.annTitle}>{ann.title}</Text>
+                    <Text style={styles.annBody}>{ann.body}</Text>
+                  </Card>
+                ))
+              ) : (
+                <View style={styles.emptyAnn}>
+                  <Ionicons name="notifications-off-outline" size={48} color={Colors.textMuted} />
+                  <Text style={styles.emptyAnnText}>Henüz bir duyuru bulunmuyor.</Text>
+                </View>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              onPress={() => setIsAnnouncementsVisible(false)}
+            >
+              <Text style={styles.modalCloseBtnText}>Kapat</Text>
+            </TouchableOpacity>
           </View>
-        )}
-      </SafeAreaView>
-    </TouchableWithoutFeedback>
+        </SafeAreaView>
+      </Modal>
+    </SafeAreaView>
   );
 }
 

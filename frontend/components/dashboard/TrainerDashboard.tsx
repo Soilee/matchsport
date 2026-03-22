@@ -52,7 +52,7 @@ export default function TrainerDashboard({ trainerStats, onRefresh }: Props) {
     const pending = trainerStats.pendingInstallments || [];
 
     return (
-        <ScrollView style={styles.container} scrollEnabled={false}>
+        <View style={styles.container}>
             <Text style={styles.headerTitle}>Eğitmen Paneli</Text>
 
             <Card title="Özet" style={styles.summaryCard} glow>
@@ -129,7 +129,7 @@ export default function TrainerDashboard({ trainerStats, onRefresh }: Props) {
                     </Card>
                 ))
             )}
-        </ScrollView>
+        </View>
     );
 }
 

@@ -9,7 +9,7 @@ interface Props {
     workout: WorkoutDay | null;
 }
 
-export default function ChecklistWorkout({ workout }: Props) {
+const ChecklistWorkout = React.memo(({ workout }: Props) => {
     if (!workout) {
         return (
             <Card title="Bugünkü Antrenman">
@@ -45,7 +45,9 @@ export default function ChecklistWorkout({ workout }: Props) {
             </View>
         </Card>
     );
-}
+});
+
+export default ChecklistWorkout;
 
 const styles = StyleSheet.create({
     card: {
