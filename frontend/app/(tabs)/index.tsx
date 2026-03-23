@@ -9,6 +9,7 @@ import { Colors } from '@/constants/Colors';
 import ProfileHeader from '@/components/dashboard/ProfileHeader';
 import MinimalistOccupancy from '@/components/dashboard/MinimalistOccupancy';
 import ChecklistWorkout from '@/components/dashboard/ChecklistWorkout';
+import ActivityLog from '@/components/dashboard/ActivityLog';
 import DailyMission from '@/components/dashboard/DailyMission';
 import HealthRingWidget from '@/components/dashboard/HealthRingWidget';
 import MembershipCard from '@/components/dashboard/MembershipCard';
@@ -274,6 +275,8 @@ export default function DashboardScreen() {
                 }}
               />
             )}
+
+            <ActivityLog history={data?.workout_history || []} />
 
             <ChecklistWorkout workout={data?.todayWorkout || null} />
 

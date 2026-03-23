@@ -144,6 +144,18 @@ async function runDailyAutomation() {
             console.log(`✅ Sent ${reengagementNotifications.length} re-engagement messages.`);
         }
 
+        // 5. Cleanup Workout Logs (Older than 7 days)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(today.getDate() - 7);
+        const { error: cleanupError } = await supabase
+            .from('workout_logs')
+            .delete()
+            .lt('workout_date', sevenDaysAgo.toISOString().split('T')[0]);
+
+        if (!cleanupError) {
+            console.log('✅ Cleaned up old workout logs.');
+        }
+
         console.log('--- 🤖 Automation Complete ---\n');
     } catch (err) {
         console.error('❌ Automation Error:', err);

@@ -1349,18 +1349,31 @@ const MemberWorkoutAssignView = ({ userId, onCancel }) => {
             <select className="modal-input" value={day.day_of_week} onChange={e => updateDay(dIdx, 'day_of_week', e.target.value)}>
               {Object.entries(DAY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
-            <input className="modal-input" placeholder="Bölge (Örn: Göğüs-Kol)" value={day.muscle_group} onChange={e => updateDay(dIdx, 'muscle_group', e.target.value)} required />
+            <input className="modal-input" placeholder="Bölge (Örn: Göğüs-Kol)" value={day.muscle_group} onChange={e => updateDay(dIdx, 'muscle_group', e.target.value)} required={!day.is_off_day} disabled={day.is_off_day} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', whiteSpace: 'nowrap', fontSize: '0.85rem' }}>
+              <input type="checkbox" checked={day.is_off_day} onChange={e => updateDay(dIdx, 'is_off_day', e.target.checked)} />
+              OFF
+            </label>
             <button type="button" className="btn-danger" onClick={() => removeDay(dIdx)}>×</button>
           </div>
-          {day.exercises.map((ex, eIdx) => (
-            <div key={eIdx} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 80px 30px', gap: '0.4rem', marginBottom: '0.4rem', alignItems: 'center' }}>
-              <input type="text" style={{ fontSize: '0.8rem', padding: '0.4rem' }} placeholder="Hareket Adı" value={ex.exercise_id || ''} onChange={e => updateEx(dIdx, eIdx, 'exercise_id', e.target.value)} list="exercises-list" />
-              <input type="number" placeholder="Set" value={ex.sets} onChange={e => updateEx(dIdx, eIdx, 'sets', e.target.value)} />
-              <input type="text" placeholder="Reps" value={ex.reps} onChange={e => updateEx(dIdx, eIdx, 'reps', e.target.value)} />
-              <button type="button" style={{ color: '#FF3B30', fontWeight: 'bold' }} onClick={() => removeEx(dIdx, eIdx)}>×</button>
+          {!day.is_off_day && (
+            <>
+              {day.exercises.map((ex, eIdx) => (
+                <div key={eIdx} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 80px 30px', gap: '0.4rem', marginBottom: '0.4rem', alignItems: 'center' }}>
+                  <input type="text" style={{ fontSize: '0.8rem', padding: '0.4rem' }} placeholder="Hareket Adı" value={ex.exercise_id || ''} onChange={e => updateEx(dIdx, eIdx, 'exercise_id', e.target.value)} list="exercises-list" />
+                  <input type="number" placeholder="Set" value={ex.sets} onChange={e => updateEx(dIdx, eIdx, 'sets', e.target.value)} />
+                  <input type="text" placeholder="Reps" value={ex.reps} onChange={e => updateEx(dIdx, eIdx, 'reps', e.target.value)} />
+                  <button type="button" style={{ color: '#FF3B30', fontWeight: 'bold' }} onClick={() => removeEx(dIdx, eIdx)}>×</button>
+                </div>
+              ))}
+              <button type="button" className="btn-action" style={{ fontSize: '0.75rem' }} onClick={() => addEx(dIdx)}>+ Hareket Ekle</button>
+            </>
+          )}
+          {day.is_off_day && (
+            <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
+              🏖️ Dinlenme Günü olarak işaretlendi.
             </div>
-          ))}
-          <button type="button" className="btn-action" style={{ fontSize: '0.75rem' }} onClick={() => addEx(dIdx)}>+ Hareket Ekle</button>
+          )}
         </div>
       ))}
       <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>

@@ -211,7 +211,8 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             badgeRes,
             qrRes,
             notificationsRes,
-            installmentsRes
+            installmentsRes,
+            workoutHistoryRes
         ] = await Promise.all([
             db.from('users').select('id, full_name, nickname, email, phone, role, profile_photo_url, kvkk_mask').eq('id', userId).single(),
             db.from('memberships').select('*').eq('user_id', userId).order('end_date', { ascending: false }).limit(1).maybeSingle(),
@@ -230,7 +231,8 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             db.from('user_badges').select('*, badges(*)').eq('user_id', userId),
             db.from('qr_codes').select('qr_token').eq('user_id', userId).eq('is_active', true).maybeSingle(),
             db.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_read', false),
-            db.from('installments').select('*').eq('user_id', userId).order('due_date', { ascending: true })
+            db.from('installments').select('*').eq('user_id', userId).order('due_date', { ascending: true }),
+            db.from('workout_logs').select('*').eq('user_id', userId).gte('workout_date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]).order('workout_date', { ascending: true })
         ]);
 
         const user = userRes.data;
@@ -377,6 +379,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             prRecords: prRes.data || [],
             measurements: (measurementRes.data || []).reverse(),
             announcements: announcementRes.data || [],
+            workout_history: workoutHistoryRes.data || [],
             leaderboard: { attendance: attendanceLeaderboard, strength: strengthLeaderboard },
             badges: badgeRes.data || [],
             qrCode: qrRes.data?.qr_token || null,
@@ -488,6 +491,15 @@ router.post('/checkout', authMiddleware, async (req, res) => {
         const now = new Date();
         const duration = Math.round((now - new Date(openCheckin.check_in_time)) / 60000);
         await db.from('check_ins').update({ check_out_time: now.toISOString(), duration_minutes: duration }).eq('id', openCheckin.id);
+
+        // Auto-log as workout
+        if (duration >= 15) { // Only log visits > 15 mins as workouts
+            await db.from('workout_logs').insert({
+                user_id: userId,
+                workout_date: now.toISOString().split('T')[0],
+                duration_minutes: duration
+            });
+        }
 
         const { data: lastOcc } = await db.from('gym_occupancy').select('current_count').order('recorded_at', { ascending: false }).limit(1).maybeSingle();
         await db.from('gym_occupancy').insert({
@@ -1365,14 +1377,17 @@ router.post('/admin/tasks', authMiddleware, requireRole('admin', 'trainer'), asy
 
 router.post('/admin/announcements', authMiddleware, requireRole('admin'), async (req, res) => {
     try {
-        const { title, content, type } = req.body;
+        const { title, body, content, type } = req.body;
+        const finalBody = body || content;
+        const finalType = type === 'information' ? 'general' : (type || 'general');
         const db = getDb();
         const { data } = await db.from('announcements').insert({
             created_by: req.user.id,
             title,
-            body: content,
-            type: type || 'general',
-            is_active: true
+            body: finalBody,
+            type: finalType,
+            is_active: true,
+            publish_at: new Date().toISOString()
         }).select().single();
 
         await logAudit('ANNOUNCEMENT_CREATED', req.user.id, null, { title });
@@ -1387,7 +1402,7 @@ router.post('/admin/announcements', authMiddleware, requireRole('admin'), async 
                 const notifications = activeMembers.map(m => ({
                     user_id: m.user_id,
                     title: `\uD83D\uDCE2 ${title}`,
-                    body: content || '',
+                    body: finalBody || '',
                     type: 'announcement',
                     is_read: false
                 }));
@@ -1406,7 +1421,7 @@ router.post('/admin/announcements', authMiddleware, requireRole('admin'), async 
 
 router.get('/announcements', authMiddleware, async (req, res) => {
     try {
-        const { data } = await getDb().from('announcements').select('*').eq('is_active', true).order('created_at', { ascending: false });
+        const { data } = await getDb().from('announcements').select('*').eq('is_active', true).order('publish_at', { ascending: false });
         res.json(data || []);
     } catch (err) {
         res.status(500).json({ error: 'Yüklenemedi' });
@@ -1787,55 +1802,36 @@ router.get('/admin/user-logs/:id', authMiddleware, requireRole('admin', 'trainer
 
 router.post('/admin/assign-workout', authMiddleware, requireRole('admin', 'trainer'), async (req, res) => {
     try {
-        const { user_id, program_name, start_date, end_date, days } = req.body;
+        const { user_id, program_name, days } = req.body;
         const db = getDb();
 
         // 1. Deactivate old programs
         await db.from('workout_programs').update({ is_active: false }).eq('user_id', user_id);
 
         // 2. Create new program
-        const { data: program, error: pError } = await db.from('workout_programs').insert({
+        const { data: program } = await db.from('workout_programs').insert({
             user_id,
-            program_name: program_name || 'Özel Program',
-            start_date: start_date || new Date().toISOString().split('T')[0],
-            end_date: end_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            program_name,
+            assigned_by: req.user.id,
             is_active: true
         }).select().single();
 
-        if (pError) throw pError;
-
-        // 3. Create days and exercises
-        for (const day of (days || [])) {
-            const { data: dayRes, error: dError } = await db.from('workout_days').insert({
+        for (const day of days) {
+            const { data: workoutDay } = await db.from('workout_days').insert({
                 program_id: program.id,
                 day_of_week: day.day_of_week,
-                muscle_group: day.muscle_group
+                muscle_group: day.muscle_group,
+                is_off_day: day.is_off_day || false
             }).select().single();
 
-            if (dError) throw dError;
-
-            if (day.exercises && day.exercises.length > 0) {
-                // Support free text exercise names instead of forcing predefined UUIDs
-                for (let ex of day.exercises) {
-                    if (ex.exercise_id && !ex.exercise_id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)) {
-                        // Not a UUID -> it's a typed name
-                        let { data: existing } = await db.from('exercises').select('id').ilike('name', ex.exercise_id).maybeSingle();
-                        if (existing) {
-                            ex.exercise_id = existing.id;
-                        } else {
-                            let { data: newEx } = await db.from('exercises').insert({ name: ex.exercise_id, muscle_group: day.muscle_group || 'Genel' }).select().single();
-                            if (newEx) ex.exercise_id = newEx.id;
-                        }
-                    }
-                }
-
-                const exercisesToInsert = day.exercises.map(ex => ({
-                    day_id: dayRes.id,
+            if (!day.is_off_day && day.exercises && day.exercises.length > 0) {
+                const exercisesToInsert = day.exercises.map((ex, idx) => ({
+                    workout_day_id: workoutDay.id,
                     exercise_id: ex.exercise_id,
                     sets: parseInt(ex.sets || 0),
                     reps: ex.reps || '12',
                     weight_kg: parseFloat(ex.weight_kg || 0),
-                    notes: ex.notes || ''
+                    order_index: idx
                 }));
                 await db.from('workout_exercises').insert(exercisesToInsert);
             }

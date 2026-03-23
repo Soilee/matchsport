@@ -57,6 +57,7 @@ export interface Exercise {
     reps: number;
     weight_kg: number;
     rest_seconds: number;
+    video_url?: string;
     completed?: boolean;
 }
 
@@ -88,6 +89,7 @@ export interface WorkoutDay {
     day_of_week: string;
     muscle_group: string;
     exercises: Exercise[];
+    is_off_day?: boolean;
     program_name?: string;
 }
 
@@ -136,6 +138,13 @@ export interface Announcement {
     publish_at: string;
 }
 
+export interface WorkoutLog {
+    id: string;
+    user_id: string;
+    workout_date: string;
+    duration_minutes: number;
+}
+
 export interface LeaderboardEntry {
     id: string;
     user_id: string;
@@ -164,6 +173,7 @@ export interface DashboardData {
     };
     badges: Badge[];
     qrCode: string | null;
+    workout_history: WorkoutLog[];
     unreadNotifications: number;
     installments: Installment[];
     adminStats?: {
