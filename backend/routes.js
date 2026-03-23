@@ -54,6 +54,20 @@ async function logAudit(action, actorId, targetId, details) {
     }
 }
 
+// Membership expiry helper
+async function autoExpireMemberships(db) {
+    const todayStr = new Date().toISOString().split('T')[0];
+    try {
+        const { error } = await db.from('memberships')
+            .update({ status: 'expired' })
+            .eq('status', 'active')
+            .lte('end_date', todayStr);
+        if (error) throw error;
+    } catch (err) {
+        console.error('Auto-expiry error:', err);
+    }
+}
+
 // =================== AUTH ===================
 
 router.post('/auth/login', async (req, res) => {
@@ -179,11 +193,8 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
         const userId = req.user.id;
         const todayStr = new Date().toISOString().split('T')[0];
 
-        // Auto-expire memberships built into the fetch
-        await db.from('memberships')
-            .update({ status: 'expired' })
-            .eq('status', 'active')
-            .lte('end_date', todayStr);
+        // 1. Auto-expire memberships
+        await autoExpireMemberships(db);
 
         // Heatmap frozen update logic (Updates every Sunday night 02:00 -> Monday 02:00)
         let now = new Date();
@@ -686,11 +697,19 @@ router.post('/workouts/complete-day', authMiddleware, async (req, res) => {
             completed_at: today
         });
 
-        const { data: user } = await db.from('users').select('current_streak, best_streak').eq('id', userId).single();
-        const newStreak = (user?.current_streak || 0) + 1;
-        const newBest = Math.max(newStreak, user?.best_streak || 0);
+        const { data: user } = await db.from('users').select('current_streak, best_streak, last_activity_date').eq('id', userId).single();
+        let newStreak = user?.current_streak || 0;
+        const todayStr = new Date().toISOString().split('T')[0];
 
-        await db.from('users').update({ current_streak: newStreak, best_streak: newBest }).eq('id', userId);
+        if (!user.last_activity_date || user.last_activity_date !== todayStr) {
+            newStreak += 1;
+            const newBest = Math.max(newStreak, user?.best_streak || 0);
+            await db.from('users').update({
+                current_streak: newStreak,
+                best_streak: newBest,
+                last_activity_date: todayStr
+            }).eq('id', userId);
+        }
 
         res.json({ message: 'Antrenman tamamlandı! 🔥', current_streak: newStreak });
     } catch (err) {
@@ -851,13 +870,7 @@ router.post('/measurements', authMiddleware, async (req, res) => {
 router.get('/admin/users', authMiddleware, requireRole('admin', 'trainer'), async (req, res) => {
     try {
         const db = getDb();
-        const todayStr = new Date().toISOString().split('T')[0];
-
-        // Auto-expire memberships for users with 0 or fewer days remaining
-        await db.from('memberships')
-            .update({ status: 'expired' })
-            .eq('status', 'active')
-            .lte('end_date', todayStr);
+        await autoExpireMemberships(db);
 
         const { role } = req.query;
         let query = db.from('users').select('*');
@@ -929,7 +942,8 @@ router.delete('/admin/users/:id', authMiddleware, requireRole('admin'), async (r
                 'installments', 'payments', 'nutrition_logs', 'ai_macro_logs',
                 'body_measurements', 'diet_plans', 'check_ins',
                 'notifications', 'user_badges', 'qr_codes',
-                'pr_records', 'leaderboard'
+                'pr_records', 'leaderboard', 'workout_logs',
+                'workout_completions'
             ];
             for (const table of tables) {
                 try {
@@ -1820,20 +1834,44 @@ router.post('/admin/assign-workout', authMiddleware, requireRole('admin', 'train
             const { data: workoutDay } = await db.from('workout_days').insert({
                 program_id: program.id,
                 day_of_week: day.day_of_week,
-                muscle_group: day.muscle_group,
+                muscle_group: day.muscle_group || 'Genel',
                 is_off_day: day.is_off_day || false
             }).select().single();
 
             if (!day.is_off_day && day.exercises && day.exercises.length > 0) {
-                const exercisesToInsert = day.exercises.map((ex, idx) => ({
-                    workout_day_id: workoutDay.id,
-                    exercise_id: ex.exercise_id,
-                    sets: parseInt(ex.sets || 0),
-                    reps: ex.reps || '12',
-                    weight_kg: parseFloat(ex.weight_kg || 0),
-                    order_index: idx
-                }));
-                await db.from('workout_exercises').insert(exercisesToInsert);
+                const exercisesToInsert = [];
+                for (let i = 0; i < day.exercises.length; i++) {
+                    const ex = day.exercises[i];
+                    let exerciseId = ex.exercise_id;
+
+                    // Handle free-text exercise names (convert to UUID)
+                    if (exerciseId && !exerciseId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)) {
+                        const { data: existing } = await db.from('exercises').select('id').ilike('name', exerciseId).maybeSingle();
+                        if (existing) {
+                            exerciseId = existing.id;
+                        } else {
+                            const { data: newEx } = await db.from('exercises').insert({
+                                name: exerciseId,
+                                muscle_group: day.muscle_group || 'Genel'
+                            }).select().single();
+                            if (newEx) exerciseId = newEx.id;
+                        }
+                    }
+
+                    if (exerciseId) {
+                        exercisesToInsert.push({
+                            workout_day_id: workoutDay.id,
+                            exercise_id: exerciseId,
+                            sets: parseInt(ex.sets || 0),
+                            reps: ex.reps || '12',
+                            weight_kg: parseFloat(ex.weight_kg || 0),
+                            order_index: i
+                        });
+                    }
+                }
+                if (exercisesToInsert.length > 0) {
+                    await db.from('workout_exercises').insert(exercisesToInsert);
+                }
             }
         }
 

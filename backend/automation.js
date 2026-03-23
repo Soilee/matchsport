@@ -156,6 +156,29 @@ async function runDailyAutomation() {
             console.log('✅ Cleaned up old workout logs.');
         }
 
+        // 6. Sync Gym Occupancy (Fix drift)
+        const { count: actualOccupancy } = await supabase
+            .from('check_ins')
+            .select('id', { count: 'exact', head: true })
+            .is('check_out_time', null);
+
+        const { data: latestRecord } = await supabase
+            .from('gym_occupancy')
+            .select('*')
+            .order('recorded_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (latestRecord && latestRecord.current_count !== actualOccupancy) {
+            await supabase.from('gym_occupancy').insert({
+                current_count: actualOccupancy || 0,
+                max_capacity: latestRecord.max_capacity || 100,
+                hour_of_day: new Date().getHours(),
+                day_of_week: ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][new Date().getDay()]
+            });
+            console.log(`✅ Synced gym occupancy: ${actualOccupancy || 0}`);
+        }
+
         console.log('--- 🤖 Automation Complete ---\n');
     } catch (err) {
         console.error('❌ Automation Error:', err);
