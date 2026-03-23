@@ -40,35 +40,13 @@ export default function ManualWorkoutScreen() {
 
         setLoading(true);
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error('Oturum bulunamadı');
-
-            // 1. Create Workout Header
+            const { saveManualWorkout } = await import('@/services/api');
             const finalWorkoutName = `[${DAYS.find(d => d.id === selectedDay)?.label}] ${workoutName}`;
-            const { data: workout, error: wErr } = await supabase
-                .from('user_manual_workouts')
-                .insert({ user_id: user.id, workout_name: finalWorkoutName })
-                .select()
-                .single();
 
-            if (wErr) throw wErr;
-
-            // 2. Create Exercise Logs
-            const logs = exercises
-                .filter(ex => ex.name)
-                .map(ex => ({
-                    user_id: user.id,
-                    workout_id: workout.id,
-                    exercise_name: ex.name,
-                    sets_count: parseInt(ex.sets) || 1,
-                    reps_count: parseInt(ex.reps) || 1,
-                    weight_kg: parseFloat(ex.weight) || 0
-                }));
-
-            if (logs.length > 0) {
-                const { error: lErr } = await supabase.from('workout_logs').insert(logs);
-                if (lErr) throw lErr;
-            }
+            await saveManualWorkout({
+                workout_name: finalWorkoutName,
+                exercises: exercises.filter(ex => ex.name)
+            });
 
             Alert.alert('Başarılı', 'Antrenman kaydedildi! 🔥');
             router.back();

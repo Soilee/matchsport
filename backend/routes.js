@@ -747,10 +747,27 @@ router.get('/workouts/manual', authMiddleware, async (req, res) => {
 
 router.post('/workouts/manual', authMiddleware, async (req, res) => {
     try {
-        const { workout_name } = req.body;
-        const { data } = await getDb().from('user_manual_workouts').insert({ user_id: req.user.id, workout_name }).select().single();
-        res.json(data);
+        const { workout_name, exercises } = req.body;
+        const db = getDb();
+        const { data: workout, error: wErr } = await db.from('user_manual_workouts').insert({ user_id: req.user.id, workout_name }).select().single();
+        if (wErr) throw wErr;
+
+        if (exercises && Array.isArray(exercises) && exercises.length > 0) {
+            const logs = exercises.map(ex => ({
+                user_id: req.user.id,
+                workout_id: workout.id,
+                exercise_name: ex.name,
+                sets_count: parseInt(ex.sets) || 1,
+                reps_count: parseInt(ex.reps) || 1,
+                weight_kg: parseFloat(ex.weight) || 0
+            }));
+            const { error: lErr } = await db.from('workout_logs').insert(logs);
+            if (lErr) throw lErr;
+        }
+
+        res.json(workout);
     } catch (err) {
+        console.error('Manual Workout Create Error:', err);
         res.status(500).json({ error: 'Oluşturulamadı' });
     }
 });
@@ -1616,15 +1633,17 @@ router.post('/nutrition/ai-log-meal', authMiddleware, async (req, res) => {
             log_date: today
         }).select().single();
 
-        // Background history
+        // Background history (exclude feedback since ai_macro_logs table might not have it)
+        const { feedback, ...macrosToLog } = macros;
         await db.from('ai_macro_logs').insert({
-            user_id: req.user.id, raw_text: text, ...macros
+            user_id: req.user.id, raw_text: text, ...macrosToLog
         });
 
         res.json({ message: 'Öğün başarıyla eklendi', data: data });
     } catch (err) {
-        console.error('AI Meal Log Error:', err);
-        res.status(500).json({ error: 'Öğün eklenemedi, AI analizi başarısız.' });
+        console.error('AI Meal Log Full Error:', err);
+        const errorMessage = err.message || 'Bilinmeyen hata';
+        res.status(500).json({ error: `Öğün eklenemedi: ${errorMessage}` });
     }
 });
 

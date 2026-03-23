@@ -2,15 +2,13 @@ import axios from 'axios';
 import { Platform } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Use localhost for web, 10.0.2.2 for Android emulator, localhost for iOS simulator
 const getBaseUrl = () => {
     return 'https://matchsport.onrender.com';
 };
 
 const api = axios.create({
     baseURL: `${getBaseUrl()}/api`,
-    timeout: 30000,
+    timeout: 60000,
     headers: { 'Content-Type': 'application/json' },
 });
 
@@ -210,6 +208,11 @@ export const approvePayment = async (payment_id: string) => {
 
 export const saveDietPlan = async (data: any) => {
     const res = await api.post('/diet', data);
+    return res.data;
+};
+
+export const saveManualWorkout = async (data: { workout_name: string; exercises: any[] }) => {
+    const res = await api.post('/workouts/manual', data);
     return res.data;
 };
 
