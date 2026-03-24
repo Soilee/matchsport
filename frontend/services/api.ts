@@ -1,16 +1,16 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
-const getBaseUrl = () => {
-    return 'https://matchsport.onrender.com';
-};
 
-const api = axios.create({
-    baseURL: `${getBaseUrl()}/api`,
-    timeout: 60000,
-    headers: { 'Content-Type': 'application/json' },
-});
+// --- TYPES ---
+export interface User {
+    id: string;
+    full_name: string;
+    email: string;
+    role: 'member' | 'trainer' | 'admin' | 'superadmin';
+    current_streak: number;
+    best_streak: number;
+}
 
 export interface Task {
     id: string;
@@ -19,21 +19,61 @@ export interface Task {
     created_at: string;
 }
 
-// Interceptor for 401 errors
+export interface Membership {
+    id: string;
+    status: 'active' | 'expired' | 'frozen' | 'grace';
+    end_date: string;
+    remaining_days: number;
+    package_type: string;
+}
+
+// --- CONFIG ---
+const getBaseUrl = () => {
+    // Priority: Env Var > Localhost (for Dev) > Render (Production Fallback)
+    const envUrl = process.env.EXPO_PUBLIC_API_URL;
+    if (envUrl) return envUrl;
+
+    if (__DEV__) {
+        // In Expo, localhost might not work on physical devices, often better to use IP
+        return Platform.OS === 'android' ? 'http://10.0.2.2:3001' : 'http://localhost:3001';
+    }
+    return 'https://matchsport.onrender.com';
+};
+
+const api = axios.create({
+    baseURL: `${getBaseUrl()}/api`,
+    timeout: 30000, // Reduced to 30s for better mobile UX
+    headers: { 'Content-Type': 'application/json' },
+});
+
+let authToken: string | null = null;
+
+// --- INTERCEPTORS ---
+
+// Response Interceptor: Handle global errors and auth
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
+        const originalRequest = error.config;
+
         if (error.response?.status === 401) {
-            console.warn('Session expired or invalid. Clearing token...');
+            console.warn('Session expired. Clearing storage...');
             authToken = null;
             delete api.defaults.headers.common['Authorization'];
             await AsyncStorage.removeItem('authToken');
+            // Potential: Emit event to trigger app-wide logout/redirect
         }
+
+        // Log meaningful errors in dev
+        if (__DEV__) {
+            console.error(`API Error [${originalRequest.url}]:`, error.response?.data || error.message);
+        }
+
         return Promise.reject(error);
     }
 );
 
-let authToken: string | null = null;
+// --- AUTH HELPERS ---
 
 export const setAuthToken = async (token: string | null, persist: boolean = true) => {
     authToken = token;
@@ -65,170 +105,65 @@ export const loadStoredToken = async () => {
     return null;
 };
 
+// --- API METHODS ---
+
+const safeGet = async <T>(url: string, config?: any): Promise<T> => {
+    const res = await api.get(url, config);
+    return res.data;
+};
+
+const safePost = async <T>(url: string, data?: any): Promise<T> => {
+    const res = await api.post(url, data);
+    return res.data;
+};
+
 export const login = async (email: string, password: string, rememberMe: boolean = true) => {
-    const res = await api.post('/auth/login', { email, password });
-    await setAuthToken(res.data.token, rememberMe);
-    return res.data;
+    const data = await safePost<{ token: string; user: User }>('/auth/login', { email, password });
+    await setAuthToken(data.token, rememberMe);
+    return data;
 };
 
-export const getDashboard = async () => {
-    const res = await api.get('/dashboard');
-    return res.data;
-};
-
-export const checkIn = async () => {
-    const res = await api.post('/checkin');
-    return res.data;
-};
-
-export const checkOut = async () => {
-    const res = await api.post('/checkout');
-    return res.data;
-};
-
-export const getWorkoutProgram = async () => {
-    const res = await api.get('/workouts/program');
-    return res.data;
-};
-
-export const getPRRecords = async () => {
-    const res = await api.get('/pr-records');
-    return res.data;
-};
-
-export const addPRRecord = async (data: { exercise_id: string; max_weight_kg: number; reps: number; notes: string }) => {
-    const res = await api.post('/pr-records', data);
-    return res.data;
-};
-
-export const getMeasurements = async () => {
-    const res = await api.get('/measurements');
-    return res.data;
-};
-
-export const addMeasurement = async (data: any) => {
-    const res = await api.post('/measurements', data);
-    return res.data;
-};
-
-export const getDietPlan = async () => {
-    const res = await api.get('/diet');
-    return res.data;
-};
-
-export const getAnnouncements = async () => {
-    const res = await api.get('/announcements');
-    return res.data;
-};
-
-export const getLeaderboard = async () => {
-    const res = await api.get('/leaderboard');
-    return res.data;
-};
-
-export const getExercises = async () => {
-    const res = await api.get('/exercises');
-    return res.data;
-};
-
-export const scanQR = async (payload: string) => {
-    const res = await api.post('/scan', { qr_payload: payload });
-    return res.data;
-};
+export const getDashboard = () => safeGet<any>('/dashboard');
+export const checkIn = () => safePost<any>('/checkin');
+export const checkOut = () => safePost<any>('/checkout');
+export const getWorkoutProgram = () => safeGet<any>('/workouts/program');
+export const getPRRecords = () => safeGet<any[]>('/pr-records');
+export const addPRRecord = (data: any) => safePost<any>('/pr-records', data);
+export const getMeasurements = (userId?: string) => safeGet<any[]>('/measurements', { params: { user_id: userId } });
+export const addMeasurement = (data: any) => safePost<any>('/measurements', data);
+export const getDietPlan = () => safeGet<any>('/diet');
+export const getAnnouncements = () => safeGet<any[]>('/announcements');
+export const getLeaderboard = () => safeGet<any[]>('/leaderboard');
+export const getExercises = () => safeGet<any[]>('/exercises');
+export const scanQR = (payload: string) => safePost<any>('/scan', { qr_payload: payload });
 
 export const getTasks = async (): Promise<Task[]> => {
     try {
-        const res = await api.get('/tasks');
-        return res.data || [];
+        return await safeGet<Task[]>('/tasks');
     } catch (e) {
-        console.error('getTasks error', e);
         return [];
     }
 };
 
-export const completeTask = async (taskId: string) => {
-    const res = await api.post(`/tasks/${taskId}/complete`);
-    return res.data;
-};
+export const completeTask = (taskId: string) => safePost<any>(`/tasks/${taskId}/complete`);
+export const getFoods = () => safeGet<any[]>('/foods');
+export const addNutritionLog = (data: any) => safePost<any>('/nutrition', data);
+export const markNotificationsRead = () => safePost<any>('/notifications/read');
+export const deleteNotification = (id: string) => api.delete(`/notifications/${id}`).then(r => r.data);
+export const clearNotifications = () => api.delete('/notifications').then(r => r.data);
+export const getDailyNutrition = () => safeGet<any>('/nutrition/daily');
+export const changePassword = (data: any) => api.put('/auth/change-password', data).then(r => r.data);
+export const updateProfile = (data: any) => api.put('/profile', data).then(r => r.data);
+export const completeWorkoutDay = (workout_day_id: string) => safePost<any>('/workouts/complete-day', { workout_day_id });
+export const logAiMeal = (text: string, mealType?: string) => safePost<any>('/nutrition/ai-log-meal', { text, mealType });
+export const generateAiDiet = (prompt_text: string) => safePost<any>('/nutrition/ai-generate-diet', { prompt_text });
 
-export const getFoods = async () => {
-    const res = await api.get('/foods');
-    return res.data;
-};
-
-export const addNutritionLog = async (data: { food_item_id: string; quantity_g: number; meal_type?: string }) => {
-    const res = await api.post('/nutrition', data);
-    return res.data;
-};
-
-export const markNotificationsRead = async () => {
-    const res = await api.post('/notifications/read');
-    return res.data;
-};
-
-export const deleteNotification = async (id: string) => {
-    const res = await api.delete(`/notifications/${id}`);
-    return res.data;
-};
-
-export const clearNotifications = async () => {
-    const res = await api.delete('/notifications');
-    return res.data;
-};
-
-export const getDailyNutrition = async () => {
-    const res = await api.get('/nutrition/daily');
-    return res.data;
-};
-
-export const changePassword = async (data: any) => {
-    const res = await api.put('/auth/change-password', data);
-    return res.data;
-};
-
-export const updateProfile = async (data: any) => {
-    const res = await api.put('/profile', data);
-    return res.data;
-};
-
-export const updateUserMeasurements = async (userId: string, data: any) => {
-    const res = await api.put(`/admin/users/${userId}/measurements`, data);
-    return res.data;
-};
-
-export const completeWorkoutDay = async (workout_day_id: string) => {
-    const res = await api.post('/workouts/complete-day', { workout_day_id });
-    return res.data;
-};
-
-export const logAiMeal = async (text: string, mealType?: string) => {
-    const res = await api.post('/nutrition/ai-log-meal', { text, mealType });
-    return res.data;
-};
-
-export const generateAiDiet = async (prompt_text: string) => {
-    const res = await api.post('/nutrition/ai-generate-diet', { prompt_text });
-    return res.data;
-};
-
-export const approvePayment = async (payment_id: string) => {
-    const res = await api.put(`/admin/payments/${payment_id}/approve`);
-    return res.data;
-};
-
-export const saveDietPlan = async (data: any) => {
-    const res = await api.post('/diet', data);
-    return res.data;
-};
-
-export const saveManualWorkout = async (data: { workout_name: string; exercises: any[] }) => {
-    const res = await api.post('/workouts/manual', data);
-    return res.data;
-};
-
-export const getInstallments = async () => (await api.get('/user/installments')).data;
-export const adminGetUserInstallments = async (userId: string) => (await api.get(`/admin/user-installments/${userId}`)).data;
-export const adminPayInstallment = async (instId: string) => (await api.put(`/admin/installments/${instId}/pay`)).data;
-
+// Admin Methods
+export const approvePayment = (payment_id: string) => api.put(`/admin/payments/${payment_id}/approve`).then(r => r.data);
+export const saveDietPlan = (data: any) => safePost<any>('/diet', data);
+export const saveManualWorkout = (data: any) => safePost<any>('/workouts/manual', data);
+export const getInstallments = () => safeGet<any[]>('/user/installments');
+export const adminGetUserInstallments = (userId: string) => safeGet<any[]>(`/admin/user-installments/${userId}`);
+export const adminPayInstallment = (instId: string) => api.put(`/admin/installments/${instId}/pay`).then(r => r.data);
 
 export default api;

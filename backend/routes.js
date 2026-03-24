@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { validateRegister } = require('./securityMiddleware');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'matchsport-secret-key-2026';
@@ -54,19 +55,7 @@ async function logAudit(action, actorId, targetId, details) {
     }
 }
 
-// Membership expiry helper
-async function autoExpireMemberships(db) {
-    const todayStr = new Date().toISOString().split('T')[0];
-    try {
-        const { error } = await db.from('memberships')
-            .update({ status: 'expired' })
-            .eq('status', 'active')
-            .lte('end_date', todayStr);
-        if (error) throw error;
-    } catch (err) {
-        console.error('Auto-expiry error:', err);
-    }
-}
+// Membership expiry helper is now in automation.js
 
 // =================== AUTH ===================
 
@@ -96,7 +85,8 @@ router.post('/auth/login', async (req, res) => {
     }
 });
 
-router.post('/auth/register', authMiddleware, requireRole('admin', 'trainer'), async (req, res) => {
+router.post('/auth/register', authMiddleware, requireRole('admin', 'trainer'), validateRegister, async (req, res) => {
+
     try {
         const { full_name, email, phone, password, role, nickname } = req.body;
         const db = getDb();
@@ -193,8 +183,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
         const userId = req.user.id;
         const todayStr = new Date().toISOString().split('T')[0];
 
-        // 1. Auto-expire memberships
-        await autoExpireMemberships(db);
+        // 1. Auto-expiry is now handled by automation.js
 
         // Heatmap frozen update logic (Updates every Sunday night 02:00 -> Monday 02:00)
         let now = new Date();
@@ -312,11 +301,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
         if (user && (user.role === 'admin' || user.role === 'superadmin')) {
             const todayStr = new Date().toISOString().split('T')[0];
 
-            // Auto-expire memberships for users with 0 or fewer days remaining
-            await db.from('memberships')
-                .update({ status: 'expired' })
-                .eq('status', 'active')
-                .lte('end_date', todayStr);
+            // Auto-expiry is now handled by automation.js
 
             const in1DayStr = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
             const in7DaysStr = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -422,18 +407,19 @@ router.post('/checkin', authMiddleware, async (req, res) => {
         }
 
         // 2. Check Overdue Installments (7-day grace)
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
         const { data: overdue } = await db.from('installments')
             .select('id, due_date')
             .eq('user_id', userId)
             .eq('status', 'pending')
-            .lt('due_date', sevenDaysAgo.toISOString().split('T')[0])
+            .lt('due_date', sevenDaysAgo)
             .limit(1)
             .maybeSingle();
 
         if (overdue) {
-            // Auto-freeze membership if not already
             await db.from('memberships').update({ status: 'frozen' }).eq('user_id', userId).eq('status', 'active');
             return res.status(403).json({ error: 'Gecikmiş ödemeniz bulunmaktadır. Lütfen ödeme yapınız.' });
         }
@@ -445,23 +431,26 @@ router.post('/checkin', authMiddleware, async (req, res) => {
         const { data: openCheck } = await db.from('check_ins').select('*').eq('user_id', userId).is('check_out_time', null).limit(1).maybeSingle();
         if (openCheck) return res.status(400).json({ error: 'Zaten giriş yapmışsınız' });
 
-        await db.from('check_ins').insert({ user_id: userId, check_in_time: new Date().toISOString() });
+        await db.from('check_ins').insert({ user_id: userId, check_in_time: now.toISOString() });
 
         // STREAK & BADGE LOGIC
-        const todayStr = new Date().toISOString().split('T')[0];
         const { data: user } = await db.from('users').select('current_streak, best_streak, last_activity_date').eq('id', userId).single();
 
         let newStreak = user?.current_streak || 0;
-        const lastDate = user?.last_activity_date ? new Date(user.last_activity_date) : null;
-        const today = new Date(todayStr);
+        const lastActivity = user?.last_activity_date;
 
-        if (!lastDate || (today - lastDate) / (1000 * 60 * 60 * 24) === 1) {
-            newStreak += 1;
-        } else if ((today - lastDate) / (1000 * 60 * 60 * 24) > 1) {
+        if (!lastActivity) {
             newStreak = 1;
+        } else if (lastActivity !== todayStr) {
+            const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            if (lastActivity === yesterday) {
+                newStreak += 1;
+            } else {
+                newStreak = 1;
+            }
         }
 
-        if (!lastDate || todayStr !== user.last_activity_date) {
+        if (lastActivity !== todayStr) {
             const newBest = Math.max(newStreak, user?.best_streak || 0);
             await db.from('users').update({
                 current_streak: newStreak,
@@ -474,7 +463,7 @@ router.post('/checkin', authMiddleware, async (req, res) => {
             if (milestones.includes(newStreak)) {
                 const { data: badge } = await db.from('badges').select('id').eq('requirement_value', newStreak).maybeSingle();
                 if (badge) {
-                    await db.from('user_badges').upsert({ user_id: userId, badge_id: badge.id });
+                    await db.from('user_badges').upsert({ user_id: userId, badge_id: badge.id }, { onConflict: 'user_id,badge_id' });
                 }
             }
         }
@@ -482,10 +471,10 @@ router.post('/checkin', authMiddleware, async (req, res) => {
         const { data: lastOcc } = await db.from('gym_occupancy').select('current_count').order('recorded_at', { ascending: false }).limit(1).maybeSingle();
         const newCount = (lastOcc?.current_count || 0) + 1;
         await db.from('gym_occupancy').insert({
-            current_count: newCount,
+            current_count: Math.max(0, newCount),
             max_capacity: 100,
-            hour_of_day: new Date().getHours(),
-            day_of_week: ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][new Date().getDay()]
+            hour_of_day: now.getHours(),
+            day_of_week: ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][now.getDay()]
         });
 
         res.json({ message: 'Giriş başarılı! 🔥', current_streak: newStreak });
@@ -890,7 +879,7 @@ router.post('/measurements', authMiddleware, async (req, res) => {
 router.get('/admin/users', authMiddleware, requireRole('admin', 'trainer'), async (req, res) => {
     try {
         const db = getDb();
-        await autoExpireMemberships(db);
+        // 1. Auto-expiry is now handled by automation.js
 
         const { role } = req.query;
         let query = db.from('users').select('*');
@@ -1455,7 +1444,12 @@ router.post('/admin/announcements', authMiddleware, requireRole('admin'), async 
 
 router.get('/announcements', authMiddleware, async (req, res) => {
     try {
+        const cache = req.app.get('appCache');
+        const cached = cache.get('announcements');
+        if (cached) return res.json(cached);
+
         const { data } = await getDb().from('announcements').select('*').eq('is_active', true).order('publish_at', { ascending: false });
+        cache.set('announcements', data, 600); // 10 mins cache
         res.json(data || []);
     } catch (err) {
         res.status(500).json({ error: 'Yüklenemedi' });
@@ -1510,7 +1504,12 @@ router.post('/admin/reset-password', authMiddleware, requireRole('admin'), async
 
 router.get('/exercises', authMiddleware, async (req, res) => {
     try {
+        const cache = req.app.get('appCache');
+        const cached = cache.get('exercises_full');
+        if (cached) return res.json(cached);
+
         const { data } = await getDb().from('exercises').select('*').order('name');
+        cache.set('exercises_full', data, 3600); // 1 hour cache
         res.json(data || []);
     } catch (err) {
         res.status(500).json({ error: 'Egzersiz listesi yüklenemedi' });
