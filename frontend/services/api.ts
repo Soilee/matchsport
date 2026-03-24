@@ -66,7 +66,18 @@ api.interceptors.response.use(
 
         // Log meaningful errors in dev
         if (__DEV__) {
-            console.error(`API Error [${originalRequest.url}]:`, error.response?.data || error.message);
+            const status = error.response?.status;
+            const data = error.response?.data;
+            const message = error.message;
+
+            console.error(`❌ API Error [${originalRequest.url}]:`, {
+                status,
+                data,
+                message,
+                hint: message === 'Network Error'
+                    ? 'IP adresin yanlış olabilir veya backend çalışmıyor olabilir. Fiziksel cihazda localhost ÇALIŞMAZ.'
+                    : 'Sunucu yanıtı hatası.'
+            });
         }
 
         return Promise.reject(error);
