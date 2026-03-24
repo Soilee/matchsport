@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, ScrollView, View, Text, RefreshControl, ActivityIndicator, TouchableOpacity, TouchableWithoutFeedback, Keyboard, Modal } from 'react-native';
+import { StyleSheet, ScrollView, View, Text, RefreshControl, ActivityIndicator, TouchableOpacity, TouchableWithoutFeedback, Keyboard, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import Card from '@/components/common/Card';
@@ -297,34 +297,82 @@ export default function DashboardScreen() {
         <SafeAreaView style={{ flex: 1, backgroundColor: Colors.surface }}>
           <View style={[styles.modalContent, { flex: 1, borderRadius: 0, padding: 20 }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Duyurular</Text>
-              <TouchableOpacity onPress={() => setIsAnnouncementsVisible(false)}>
-                <Ionicons name="close" size={24} color={Colors.text} />
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Duyurular & Bildirimler</Text>
+              <View style={{ flexDirection: 'row', gap: 15, alignItems: 'center' }}>
+                {(data?.notifications?.length ?? 0) > 0 && (
+                  <TouchableOpacity onPress={async () => {
+                    Alert.alert('Emin misiniz?', 'Tüm bildirimleri silmek istiyor musunuz?', [
+                      { text: 'İptal', style: 'cancel' },
+                      {
+                        text: 'Temizle',
+                        style: 'destructive',
+                        onPress: async () => {
+                          try {
+                            const { clearNotifications } = require('@/services/api');
+                            await clearNotifications();
+                            setData(prev => prev ? { ...prev, notifications: [], unreadNotifications: 0 } : null);
+                          } catch (e) { console.error(e); }
+                        }
+                      }
+                    ]);
+                  }}>
+                    <Text style={{ color: Colors.primary, fontSize: 13, fontWeight: '600' }}>Tümünü Sil</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => setIsAnnouncementsVisible(false)}>
+                  <Ionicons name="close" size={24} color={Colors.text} />
+                </TouchableOpacity>
+              </View>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              {data?.announcements && data.announcements.length > 0 ? (
-                data.announcements.map((ann) => (
-                  <Card key={ann.id} style={styles.announcementCard}>
+              {/* Combine Announcements and Notifications */}
+              {(() => {
+                const combined = [
+                  ...(data?.announcements || []).map(a => ({ ...a, is_announcement: true })),
+                  ...(data?.notifications || []).map(n => ({ ...n, is_announcement: false }))
+                ].sort((a: any, b: any) => new Date(b.publish_at || b.sent_at).getTime() - new Date(a.publish_at || a.sent_at).getTime());
+
+                if (combined.length === 0) {
+                  return (
+                    <View style={styles.emptyAnn}>
+                      <Ionicons name="notifications-off-outline" size={48} color={Colors.textMuted} />
+                      <Text style={styles.emptyAnnText}>Henüz bir duyuru veya bildirim bulunmuyor.</Text>
+                    </View>
+                  );
+                }
+
+                return combined.map((item: any) => (
+                  <Card key={item.id} style={[styles.announcementCard, (!item.is_announcement && !item.is_read) ? { borderColor: Colors.primary, borderWidth: 1 } : {}] as any}>
                     <View style={styles.annHeader}>
-                      <View style={[styles.annTypeBadge, { backgroundColor: ann.type === 'campaign' ? 'rgba(255, 107, 53, 0.1)' : 'rgba(52, 199, 89, 0.1)' }]}>
-                        <Text style={[styles.annTypeText, { color: ann.type === 'campaign' ? Colors.primary : '#34C759' }]}>
-                          {ann.type === 'campaign' ? 'Kampanya' : 'Bilgilendirme'}
+                      <View style={[styles.annTypeBadge, { backgroundColor: item.is_announcement ? (item.type === 'campaign' ? 'rgba(255, 107, 53, 0.1)' : 'rgba(52, 199, 89, 0.1)') : 'rgba(0, 122, 255, 0.1)' }]}>
+                        <Text style={[styles.annTypeText, { color: item.is_announcement ? (item.type === 'campaign' ? Colors.primary : '#34C759') : '#007AFF' }]}>
+                          {item.is_announcement ? (item.type === 'campaign' ? 'Kampanya' : 'Bilgilendirme') : 'Sana Özel'}
                         </Text>
                       </View>
-                      <Text style={styles.annDate}>{new Date(ann.publish_at).toLocaleDateString('tr-TR')}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <Text style={styles.annDate}>{new Date(item.publish_at || item.sent_at).toLocaleDateString('tr-TR')}</Text>
+                        {!item.is_announcement && (
+                          <TouchableOpacity onPress={async () => {
+                            try {
+                              const { deleteNotification } = require('@/services/api');
+                              await deleteNotification(item.id);
+                              setData(prev => prev ? {
+                                ...prev,
+                                notifications: prev.notifications.filter(n => n.id !== item.id)
+                              } : null);
+                            } catch (e) { console.error(e); }
+                          }}>
+                            <Ionicons name="trash-outline" size={18} color={Colors.error} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     </View>
-                    <Text style={styles.annTitle}>{ann.title}</Text>
-                    <Text style={styles.annBody}>{ann.body}</Text>
+                    <Text style={styles.annTitle}>{item.title}</Text>
+                    <Text style={styles.annBody}>{item.body}</Text>
                   </Card>
-                ))
-              ) : (
-                <View style={styles.emptyAnn}>
-                  <Ionicons name="notifications-off-outline" size={48} color={Colors.textMuted} />
-                  <Text style={styles.emptyAnnText}>Henüz bir duyuru bulunmuyor.</Text>
-                </View>
-              )}
+                ));
+              })()}
             </ScrollView>
 
             <TouchableOpacity

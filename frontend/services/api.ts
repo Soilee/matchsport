@@ -166,6 +166,16 @@ export const markNotificationsRead = async () => {
     return res.data;
 };
 
+export const deleteNotification = async (id: string) => {
+    const res = await api.delete(`/notifications/${id}`);
+    return res.data;
+};
+
+export const clearNotifications = async () => {
+    const res = await api.delete('/notifications');
+    return res.data;
+};
+
 export const getDailyNutrition = async () => {
     const res = await api.get('/nutrition/daily');
     return res.data;

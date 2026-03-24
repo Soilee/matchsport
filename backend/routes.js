@@ -241,8 +241,10 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             db.from('leaderboard').select('*, users(full_name, nickname, profile_photo_url, kvkk_mask)').eq('category', 'strength_bench').order('monthly_visits', { ascending: false }).limit(5),
             db.from('user_badges').select('*, badges(*)').eq('user_id', userId),
             db.from('qr_codes').select('qr_token').eq('user_id', userId).eq('is_active', true).maybeSingle(),
-            db.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_read', false),
+            db.from('notifications').select('*').eq('user_id', userId).order('sent_at', { ascending: false }).limit(20),
             db.from('installments').select('*').eq('user_id', userId).order('due_date', { ascending: true }),
+            // Fix: workout_logs table might use 'logged_at' or 'workout_date'. Using COALESCE or checking both if unsure.
+            // But I just added 'workout_date' in SQL fix, so let's use it.
             db.from('workout_logs').select('*').eq('user_id', userId).gte('workout_date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]).order('workout_date', { ascending: true })
         ]);
 
@@ -394,7 +396,8 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             leaderboard: { attendance: attendanceLeaderboard, strength: strengthLeaderboard },
             badges: badgeRes.data || [],
             qrCode: qrRes.data?.qr_token || null,
-            unreadNotifications: notificationsRes.count || 0,
+            notifications: notificationsRes.data || [],
+            unreadNotifications: (notificationsRes.data || []).filter(n => !n.is_read).length,
             installments,
             adminStats,
             trainerStats,
@@ -1464,7 +1467,28 @@ router.post('/notifications/read', authMiddleware, async (req, res) => {
         await getDb().from('notifications').update({ is_read: true }).eq('user_id', req.user.id).eq('is_read', false);
         res.json({ message: 'Bildirimler okundu olarak işaretlendi' });
     } catch (err) {
+        console.error('Notif Read Error:', err);
         res.status(500).json({ error: 'İşlem başarısız' });
+    }
+});
+
+router.delete('/notifications/:id', authMiddleware, async (req, res) => {
+    try {
+        await getDb().from('notifications').delete().eq('id', req.params.id).eq('user_id', req.user.id);
+        res.json({ message: 'Bildirim silindi' });
+    } catch (err) {
+        console.error('Notif Delete Error:', err);
+        res.status(500).json({ error: 'Bildirim silinemedi' });
+    }
+});
+
+router.delete('/notifications', authMiddleware, async (req, res) => {
+    try {
+        await getDb().from('notifications').delete().eq('user_id', req.user.id);
+        res.json({ message: 'Tüm bildirimler silindi' });
+    } catch (err) {
+        console.error('Notif Delete All Error:', err);
+        res.status(500).json({ error: 'Bildirimler temizlenemedi' });
     }
 });
 

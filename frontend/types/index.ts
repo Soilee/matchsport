@@ -138,6 +138,16 @@ export interface Announcement {
     publish_at: string;
 }
 
+export interface Notification {
+    id: string;
+    user_id: string;
+    title: string;
+    body: string;
+    type: string;
+    is_read: boolean;
+    sent_at: string;
+}
+
 export interface WorkoutLog {
     id: string;
     user_id: string;
@@ -174,6 +184,7 @@ export interface DashboardData {
     badges: Badge[];
     qrCode: string | null;
     workout_history: WorkoutLog[];
+    notifications: Notification[];
     unreadNotifications: number;
     installments: Installment[];
     adminStats?: {

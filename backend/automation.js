@@ -13,17 +13,26 @@ async function runDailyAutomation() {
             .not('birth_date', 'is', null);
 
         const bdayNotifications = [];
-        users?.forEach(user => {
+        for (const user of (users || [])) {
             if (user.birth_date && user.birth_date.slice(5, 10) === todayMonthDay) {
-                bdayNotifications.push({
-                    user_id: user.id,
-                    title: `🎂 Doğum Günün Kutlu Olsun!`,
-                    body: `Sevgili ${user.full_name.split(' ')[0]}, MatchSport ailesi olarak sağlıklı ve spor dolu bir yıl dileriz! 🥳`,
-                    type: 'announcement',
-                    is_read: false
-                });
+                // GUARD: Check if already sent today
+                const { count } = await supabase.from('notifications')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('user_id', user.id)
+                    .eq('title', `🎂 Doğum Günün Kutlu Olsun!`)
+                    .gte('sent_at', today.toISOString().split('T')[0]);
+
+                if (!count) {
+                    bdayNotifications.push({
+                        user_id: user.id,
+                        title: `🎂 Doğum Günün Kutlu Olsun!`,
+                        body: `Sevgili ${user.full_name.split(' ')[0]}, MatchSport ailesi olarak sağlıklı ve spor dolu bir yıl dileriz! 🥳`,
+                        type: 'announcement',
+                        is_read: false
+                    });
+                }
             }
-        });
+        }
 
         if (bdayNotifications.length > 0) {
             await supabase.from('notifications').insert(bdayNotifications);
@@ -42,7 +51,6 @@ async function runDailyAutomation() {
             .eq('status', 'active');
 
         const inactivityNotifications = [];
-
         if (activeMembers) {
             for (const member of activeMembers) {
                 // Check last check-in
@@ -54,15 +62,23 @@ async function runDailyAutomation() {
                     .limit(1)
                     .maybeSingle();
 
-                // If no check-in or last check-in was more than 14 days ago
                 if (!lastCheckIn || new Date(lastCheckIn.check_in_time) < fourteenDaysAgo) {
-                    inactivityNotifications.push({
-                        user_id: member.user_id,
-                        title: `🔥 Seni Özledik!`,
-                        body: `Merhaba ${member.users.full_name.split(' ')[0]}, 14 gündür aramızda yoksun. Tembellik yapma, antrenman seni bekliyor! 💪`,
-                        type: 'announcement',
-                        is_read: false
-                    });
+                    // GUARD: Check if already sent today
+                    const { count } = await supabase.from('notifications')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('user_id', member.user_id)
+                        .eq('title', `🔥 Seni Özledik!`)
+                        .gte('sent_at', today.toISOString().split('T')[0]);
+
+                    if (!count) {
+                        inactivityNotifications.push({
+                            user_id: member.user_id,
+                            title: `🔥 Seni Özledik!`,
+                            body: `Merhaba ${member.users.full_name.split(' ')[0]}, 14 gündür aramızda yoksun. Tembellik yapma, antrenman seni bekliyor! 💪`,
+                            type: 'announcement',
+                            is_read: false
+                        });
+                    }
                 }
             }
         }
@@ -79,27 +95,36 @@ async function runDailyAutomation() {
             .eq('status', 'active');
 
         const expiryNotifications = [];
-        activeMemberships?.forEach(m => {
+        for (const m of (activeMemberships || [])) {
             const endDate = new Date(m.end_date);
             const diffTime = endDate - today;
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
             if ([14, 7, 3, 1].includes(diffDays)) {
-                let message = "";
-                if (diffDays === 14) message = "Üyeliğinin bitmesine tam 2 hafta kaldı. Devamlılık başarının anahtarıdır, tempoyu bozma! 💪";
-                else if (diffDays === 7) message = "Üyeliğinin bitmesine son 1 hafta! Yeni hedefler için planlama yapmaya ne dersin? 🎯";
-                else if (diffDays === 3) message = "Son 3 gün! Heyecanını kaybetme, spor salonu seni bekliyor. 🔥";
-                else if (diffDays === 1) message = "Üyeliğin yarın sona eriyor! Yarın da antrenmanda görüşürüz değil mi? 😉";
+                // GUARD: Check if already sent today
+                const { count } = await supabase.from('notifications')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('user_id', m.user_id)
+                    .like('title', `📅 Üyelik Hatırlatması%`)
+                    .gte('sent_at', today.toISOString().split('T')[0]);
 
-                expiryNotifications.push({
-                    user_id: m.user_id,
-                    title: `📅 Üyelik Hatırlatması (${diffDays} Gün)`,
-                    body: `Selam ${m.users.full_name.split(' ')[0]}, ${message}`,
-                    type: 'announcement',
-                    is_read: false
-                });
+                if (!count) {
+                    let message = "";
+                    if (diffDays === 14) message = "Üyeliğinin bitmesine tam 2 hafta kaldı. Devamlılık başarının anahtarıdır, tempoyu bozma! 💪";
+                    else if (diffDays === 7) message = "Üyeliğinin bitmesine son 1 hafta! Yeni hedefler için planlama yapmaya ne dersin? 🎯";
+                    else if (diffDays === 3) message = "Son 3 gün! Heyecanını kaybetme, spor salonu seni bekliyor. 🔥";
+                    else if (diffDays === 1) message = "Üyeliğin yarın sona eriyor! Yarın da antrenmanda görüşürüz değil mi? 😉";
+
+                    expiryNotifications.push({
+                        user_id: m.user_id,
+                        title: `📅 Üyelik Hatırlatması (${diffDays} Gün)`,
+                        body: `Selam ${m.users.full_name.split(' ')[0]}, ${message}`,
+                        type: 'announcement',
+                        is_read: false
+                    });
+                }
             }
-        });
+        }
 
         if (expiryNotifications.length > 0) {
             await supabase.from('notifications').insert(expiryNotifications);
@@ -147,10 +172,11 @@ async function runDailyAutomation() {
         // 5. Cleanup Workout Logs (Older than 7 days)
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(today.getDate() - 7);
+        // Corrected column name: logged_at or workout_date
         const { error: cleanupError } = await supabase
             .from('workout_logs')
             .delete()
-            .lt('workout_date', sevenDaysAgo.toISOString().split('T')[0]);
+            .or(`logged_at.lt.${sevenDaysAgo.toISOString()},workout_date.lt.${sevenDaysAgo.toISOString().split('T')[0]}`);
 
         if (!cleanupError) {
             console.log('✅ Cleaned up old workout logs.');
