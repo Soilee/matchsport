@@ -1599,7 +1599,8 @@ router.post('/nutrition/ai-log-meal', authMiddleware, async (req, res) => {
         }
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        // Use gemini-1.5-pro for better stability and analysis
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
         // Get user info for context
         const { data: userStats } = await db.from('users').select('height_cm, weight_kg, goal').eq('id', req.user.id).single();
@@ -1624,14 +1625,24 @@ router.post('/nutrition/ai-log-meal', authMiddleware, async (req, res) => {
         }
         Cevabın sadece JSON objesi olsun, markdown blockları içermesin.`;
 
+        console.log('--- AI Meal Log Start ---');
+        console.log('Sending prompt to Gemini...');
+
         const result = await model.generateContent(prompt);
-        const responseText = result.response.text();
+        const response = await result.response;
+        const responseText = response.text();
+
+        console.log('Gemini raw response:', responseText);
+
         const match = responseText.match(/\{[\s\S]*\}/);
-        if (!match) throw new Error("AI'dan geçerli bir JSON yanıtı alınamadı");
+        if (!match) {
+            console.error('Gemini Invalid JSON:', responseText);
+            throw new Error("AI'dan geçerli bir JSON yanıtı alınamadı");
+        }
 
         const macros = JSON.parse(match[0]);
 
-        const { data } = await db.from('nutrition_logs').insert({
+        const { data, error: insertError } = await db.from('nutrition_logs').insert({
             user_id: req.user.id,
             raw_text: text,
             meal_type: mealTypeStr,
@@ -1644,20 +1655,37 @@ router.post('/nutrition/ai-log-meal', authMiddleware, async (req, res) => {
             logged_at: today
         }).select().single();
 
-        // Background history
-        await db.from('ai_macro_logs').insert({
+        if (insertError) {
+            console.error('Supabase Insert Error (nutrition_logs):', insertError);
+            throw new Error(`Veritabanı kayıt hatası: ${insertError.message}`);
+        }
+
+        // Background history (don't await strictly to not block return)
+        db.from('ai_macro_logs').insert({
             user_id: req.user.id,
             raw_text: text,
             protein_g: macros.protein_g,
             carbs_g: macros.carbs_g,
             fat_g: macros.fat_g,
             calories: macros.calories
+        }).then(({ error }) => {
+            if (error) console.error('Supabase Insert Error (ai_macro_logs):', error);
         });
 
+        console.log('--- AI Meal Log Success ---');
         res.json({ message: 'Öğün başarıyla eklendi', data: data });
     } catch (err) {
-        console.error('AI Meal Log Full Error:', err);
-        const errorMessage = err.message || 'Bilinmeyen hata';
+        console.error('--- AI Meal Log Error ---');
+        console.error('Detailed Error Object:', err);
+
+        let errorMessage = 'Bilinmeyen AI hatası';
+        if (err.message) {
+            if (err.message.includes('429')) errorMessage = 'Yapay zeka yoğunluk nedeniyle şu an cevap veremiyor (429). Lütfen 1 dakika sonra tekrar deneyin.';
+            else if (err.message.includes('401')) errorMessage = 'Yapay zeka yetkilendirme hatası (401). Lütfen API anahtarını kontrol edin.';
+            else if (err.message.includes('fetch')) errorMessage = 'Google API servisine ulaşılamıyor. Lütfen internet bağlantınızı veya sunucu ayarlarını kontrol edin.';
+            else errorMessage = err.message;
+        }
+
         res.status(500).json({ error: `Öğün eklenemedi: ${errorMessage}` });
     }
 });

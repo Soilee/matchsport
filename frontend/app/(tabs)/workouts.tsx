@@ -51,12 +51,13 @@ export default function WorkoutsScreen() {
 
             setProgram(workoutData.program);
             setDays(workoutData.days);
-            if (workoutData.days.length > 0 && !selectedDayId) {
-                const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-                const today = dayNames[new Date().getDay()];
-                const todayData = workoutData.days.find((d: any) => d.day_of_week === today);
-                setSelectedDayId(todayData ? todayData.id : workoutData.days[0].id);
-            }
+
+            // Set initial selected day to today
+            const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+            const today = dayNames[new Date().getDay()];
+            const todayData = workoutData.days.find((d: any) => d.day_of_week === today);
+            if (todayData) setSelectedDayId(todayData.id);
+            else if (workoutData.days.length > 0) setSelectedDayId(workoutData.days[0].id);
 
             setDiet(dietData);
             setFoods(foodData);
@@ -167,129 +168,141 @@ export default function WorkoutsScreen() {
     const renderWorkoutContent = () => {
         return (
             <View>
-                {/* 1. Official Program */}
-                {program ? (
-                    <Card style={styles.programCard} glow>
-                        <View style={styles.programHeader}>
-                            <View>
-                                <Text style={styles.programTitle}>{program.program_name}</Text>
-                                <Text style={styles.programDates}>
-                                    {new Date(program.start_date).toLocaleDateString('tr-TR')} - {new Date(program.end_date).toLocaleDateString('tr-TR')}
-                                </Text>
-                            </View>
-                            <View style={{ alignItems: 'flex-end', gap: 8 }}>
-                                <View style={styles.activeBadge}>
-                                    <Text style={styles.activeText}>Aktif</Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.daysScroll}>
-                            {days.map(day => (
-                                <TouchableOpacity
-                                    key={day.id}
-                                    style={[styles.dayButton, selectedDayId === day.id && styles.dayButtonActive]}
-                                    onPress={() => setSelectedDayId(day.id)}
-                                >
-                                    <Text style={[styles.dayText, selectedDayId === day.id && styles.dayTextActive]}>
-                                        {dayMap[day.day_of_week] || day.day_of_week}
-                                    </Text>
-                                    <Text style={[styles.muscleText, selectedDayId === day.id && styles.muscleTextActive]}>
-                                        {day.muscle_group}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </Card>
-                ) : (
-                    <View style={styles.emptyState}>
-                        <Ionicons name="barbell-outline" size={64} color={Colors.textMuted} />
-                        <Text style={styles.emptyText}>Aktif bir antrenman programınız bulunmuyor.</Text>
-                    </View>
-                )}
-
-                {/* 2. Hybrid Actions (NEW) */}
-                <View style={styles.hybridActions}>
-                    <TouchableOpacity style={styles.manualEntryBtn} onPress={() => router.push('/workouts/manual' as any)}>
-                        <Ionicons name="add-circle" size={24} color="#fff" />
-                        <Text style={styles.manualEntryText}>Kendi Antrenmanını Gir</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {/* 3. Official Exercise List */}
-                {selectedDay && (
-                    <View style={styles.exercisesList}>
-                        <Text style={styles.sectionTitle}>Antrenman</Text>
-                        {selectedDay.exercises.map((ex: Exercise, idx: number) => (
-                            <Card key={ex.id} style={styles.exerciseCard}>
-                                <View style={styles.exerciseHeader}>
-                                    <View style={styles.exerciseNumber}>
-                                        <Text style={styles.exerciseNumberText}>{idx + 1}</Text>
-                                    </View>
-                                    <View style={styles.exerciseInfo}>
-                                        <Text style={styles.exerciseName}>{ex.name}</Text>
-                                        <Text style={styles.exerciseDetails}>
-                                            {ex.equipment} • {ex.rest_seconds}s Dinlenme
-                                        </Text>
-                                    </View>
-                                </View>
-                                <View style={styles.setsInfo}>
-                                    <View style={styles.setStat}>
-                                        <Text style={styles.statVal}>{ex.sets}</Text>
-                                        <Text style={styles.statLabel}>Set</Text>
-                                    </View>
-                                    <View style={styles.statDivider} />
-                                    <View style={styles.setStat}>
-                                        <Text style={styles.statVal}>{ex.reps}</Text>
-                                        <Text style={styles.statLabel}>Tekrar</Text>
-                                    </View>
-                                    <View style={styles.statDivider} />
-                                    <View style={styles.setStat}>
-                                        <Text style={styles.statVal}>{ex.weight_kg}</Text>
-                                        <Text style={styles.statLabel}>kg</Text>
-                                    </View>
-                                </View>
-                            </Card>
-                        ))}
-
-                        {/* Complete Workout Button (STREAK SYSTEM) */}
-                        <TouchableOpacity
-                            style={styles.completeWorkoutBtn}
-                            onPress={async () => {
-                                try {
-                                    setLoading(true);
-                                    const { completeWorkoutDay } = await import('@/services/api');
-                                    await completeWorkoutDay(selectedDay.id);
-                                    Alert.alert('Tebrikler!', 'Antrenman tamamlandı, serin güncellendi! 🔥');
-                                    loadData();
-                                } catch (error: any) {
-                                    Alert.alert('Hata', error?.response?.data?.error || 'Kayıt sırasında bir hata oluştu.');
-                                } finally {
-                                    setLoading(false);
-                                }
-                            }}
-                            disabled={loading}
-                        >
-                            <Ionicons name="flame" size={24} color="#fff" />
-                            <Text style={styles.completeWorkoutBtnText}>ANTRENMANI BİTİRDİM</Text>
+                {/* 2. Hybrid Actions (Smart Visibility) */}
+                {(!program && !manualWorkouts.some(mw => new Date(mw.created_at).toDateString() === new Date().toDateString())) && (
+                    <View style={styles.hybridActions}>
+                        <TouchableOpacity style={styles.manualEntryBtn} onPress={() => router.push('/workouts/manual' as any)}>
+                            <Ionicons name="add-circle" size={24} color="#fff" />
+                            <Text style={styles.manualEntryText}>Kendi Antrenmanını Gir</Text>
                         </TouchableOpacity>
                     </View>
                 )}
 
+                {/* 3. Official Exercise List (Accordion Style) */}
+                <View style={styles.exercisesList}>
+                    {days.map((day, dIdx) => {
+                        const isExpanded = selectedDayId === day.id;
+                        return (
+                            <View key={day.id} style={{ marginBottom: 12 }}>
+                                <TouchableOpacity
+                                    style={[styles.accordionHeader, isExpanded && styles.accordionHeaderActive]}
+                                    onPress={() => setSelectedDayId(isExpanded ? null : day.id)}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                        <View style={[styles.dayCircle, isExpanded && styles.dayCircleActive]}>
+                                            <Text style={[styles.dayCircleText, isExpanded && styles.dayCircleTextActive]}>
+                                                {dayMap[day.day_of_week] || day.day_of_week}
+                                            </Text>
+                                        </View>
+                                        <View>
+                                            <Text style={styles.muscleText}>{day.muscle_group || 'Dinlenme Günü'}</Text>
+                                            <Text style={styles.exerciseCountText}>{day.exercises?.length || 0} Hareket</Text>
+                                        </View>
+                                    </View>
+                                    <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={20} color={isExpanded ? "#fff" : Colors.textMuted} />
+                                </TouchableOpacity>
+
+                                {isExpanded && (
+                                    <View style={styles.accordionContent}>
+                                        {day.exercises.map((ex: Exercise, idx: number) => (
+                                            <Card key={ex.id} style={styles.exerciseCard}>
+                                                <View style={styles.exerciseHeader}>
+                                                    <View style={styles.exerciseNumber}>
+                                                        <Text style={styles.exerciseNumberText}>{idx + 1}</Text>
+                                                    </View>
+                                                    <View style={styles.exerciseInfo}>
+                                                        <Text style={styles.exerciseName}>{ex.name}</Text>
+                                                        <Text style={styles.exerciseDetails}>
+                                                            {ex.equipment} • {ex.rest_seconds}s Dinlenme
+                                                        </Text>
+                                                    </View>
+                                                    <TouchableOpacity style={styles.howToBtn} onPress={() => Alert.alert('Nasıl Yapılır?', `${ex.name} hareketi için video hazırlıyoruz! ✨`)}>
+                                                        <Ionicons name="videocam-outline" size={20} color={Colors.primary} />
+                                                    </TouchableOpacity>
+                                                </View>
+                                                <View style={styles.setsInfo}>
+                                                    <View style={styles.setStat}>
+                                                        <Text style={styles.statVal}>{ex.sets}</Text>
+                                                        <Text style={styles.statLabel}>Set</Text>
+                                                    </View>
+                                                    <View style={styles.statDivider} />
+                                                    <View style={styles.setStat}>
+                                                        <Text style={styles.statVal}>{ex.reps}</Text>
+                                                        <Text style={styles.statLabel}>Tekrar</Text>
+                                                    </View>
+                                                    <View style={styles.statDivider} />
+                                                    <View style={styles.setStat}>
+                                                        <Text style={styles.statVal}>{ex.weight_kg}</Text>
+                                                        <Text style={styles.statLabel}>kg</Text>
+                                                    </View>
+                                                </View>
+                                            </Card>
+                                        ))}
+
+                                        {/* Complete Day Button */}
+                                        <TouchableOpacity
+                                            style={styles.completeWorkoutBtn}
+                                            onPress={async () => {
+                                                try {
+                                                    setLoading(true);
+                                                    const { completeWorkoutDay } = await import('@/services/api');
+                                                    await completeWorkoutDay(day.id);
+                                                    Alert.alert('Tebrikler!', 'Antrenman tamamlandı, serin güncellendi! 🔥');
+                                                    loadData();
+                                                } catch (error: any) {
+                                                    Alert.alert('Hata', error?.response?.data?.error || 'Kayıt sırasında bir hata oluştu.');
+                                                } finally {
+                                                    setLoading(false);
+                                                }
+                                            }}
+                                            disabled={loading}
+                                        >
+                                            <Ionicons name="flame" size={24} color="#fff" />
+                                            <Text style={styles.completeWorkoutBtnText}>GÜNÜ BİTİRDİM</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                            </View>
+                        );
+                    })}
+                </View>
+
                 {/* 4. Manual History (NEW) */}
                 {manualWorkouts.length > 0 && (
                     <View style={{ marginTop: 24 }}>
-                        <Text style={styles.sectionTitle}>Son Manuel Girişler</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                            <Text style={styles.sectionTitle}>Son Manuel Girişler</Text>
+                        </View>
                         {manualWorkouts.map(mw => (
                             <Card key={mw.id} style={styles.manualHistoryCard}>
                                 <View style={styles.manualHistoryContent}>
-                                    <View>
+                                    <View style={{ flex: 1 }}>
                                         <Text style={styles.manualHistoryName}>{mw.workout_name}</Text>
                                         <Text style={styles.manualHistoryDate}>
                                             {new Date(mw.created_at).toLocaleDateString('tr-TR')}
                                         </Text>
                                     </View>
-                                    <Ionicons name="checkmark-done-circle" size={24} color={Colors.success} />
+                                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                                        <TouchableOpacity onPress={() => router.push({ pathname: '/workouts/manual', params: { id: mw.id } } as any)}>
+                                            <Ionicons name="create-outline" size={22} color={Colors.primary} />
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={() => {
+                                            Alert.alert('Sil', 'Bu antrenmanı silmek istediğine emin misin?', [
+                                                { text: 'Vazgeç', style: 'cancel' },
+                                                {
+                                                    text: 'Sil', style: 'destructive', onPress: async () => {
+                                                        try {
+                                                            const { supabase } = await import('@/services/supabase');
+                                                            await supabase.from('user_manual_workouts').delete().eq('id', mw.id);
+                                                            loadData();
+                                                        } catch (e) { Alert.alert('Hata', 'Silinemedi'); }
+                                                    }
+                                                }
+                                            ]);
+                                        }}>
+                                            <Ionicons name="trash-outline" size={22} color={Colors.error || '#ff4444'} />
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
                             </Card>
                         ))}
@@ -911,8 +924,67 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '700',
     },
+    // Accordion Styles
+    accordionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+        padding: 16,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.05)',
+    },
+    accordionHeaderActive: {
+        backgroundColor: 'rgba(255, 107, 53, 0.05)',
+        borderColor: 'rgba(255, 107, 53, 0.2)',
+        borderBottomLeftRadius: 0,
+        borderBottomRightRadius: 0,
+    },
+    dayCircle: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    dayCircleActive: {
+        backgroundColor: Colors.primary,
+    },
+    dayCircleText: {
+        color: Colors.textMuted,
+        fontSize: 14,
+        fontWeight: '800',
+    },
+    dayCircleTextActive: {
+        color: '#fff',
+    },
+    exerciseCountText: {
+        color: Colors.textMuted,
+        fontSize: 12,
+        marginTop: 2,
+    },
+    accordionContent: {
+        backgroundColor: 'rgba(255, 255, 255, 0.02)',
+        padding: 16,
+        borderBottomLeftRadius: 16,
+        borderBottomRightRadius: 16,
+        borderTopWidth: 0,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 107, 53, 0.1)',
+        gap: 12,
+    },
+    howToBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255, 107, 53, 0.1)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     exercisesList: {
-        gap: 16,
+        gap: 8,
     },
     sectionTitle: {
         color: Colors.text,

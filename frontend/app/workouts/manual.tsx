@@ -7,11 +7,55 @@ import { Colors } from '@/constants/Colors';
 import Card from '@/components/common/Card';
 import { supabase } from '@/services/supabase';
 
+import { useLocalSearchParams } from 'expo-router';
+
 export default function ManualWorkoutScreen() {
+    const { id: editId } = useLocalSearchParams<{ id: string }>();
     const [workoutName, setWorkoutName] = useState('');
     const [selectedDay, setSelectedDay] = useState('');
     const [exercises, setExercises] = useState([{ name: '', sets: '', reps: '', weight: '' }]);
     const [loading, setLoading] = useState(false);
+    const [fetching, setFetching] = useState(false);
+
+    React.useEffect(() => {
+        if (editId) {
+            loadExistingWorkout();
+        }
+    }, [editId]);
+
+    const loadExistingWorkout = async () => {
+        setFetching(true);
+        try {
+            const { data, error } = await supabase.from('user_manual_workouts').select('*').eq('id', editId).single();
+            if (error) throw error;
+
+            // Extract raw name from [Day] Name format
+            const rawName = data.workout_name.replace(/^\[.*?\]\s*/, '');
+            setWorkoutName(rawName);
+
+            // Try to match day from prefix
+            const match = data.workout_name.match(/^\[(.*?)\]/);
+            if (match) {
+                const dayObj = DAYS.find(d => d.label === match[1]);
+                if (dayObj) setSelectedDay(dayObj.id);
+            }
+
+            const { data: exData } = await supabase.from('workout_logs').select('*').eq('workout_id', editId);
+            if (exData && exData.length > 0) {
+                setExercises(exData.map(e => ({
+                    name: e.exercise_name,
+                    sets: String(e.sets_count),
+                    reps: String(e.reps_count),
+                    weight: String(e.weight_kg)
+                })));
+            }
+        } catch (err) {
+            console.error('Load error:', err);
+            Alert.alert('Hata', 'Antrenman verileri yüklenemedi.');
+        } finally {
+            setFetching(false);
+        }
+    };
 
     const DAYS = [
         { id: 'mon', label: 'Pzt' }, { id: 'tue', label: 'Sal' }, { id: 'wed', label: 'Çar' },
@@ -40,19 +84,39 @@ export default function ManualWorkoutScreen() {
 
         setLoading(true);
         try {
-            const { saveManualWorkout } = await import('@/services/api');
             const finalWorkoutName = `[${DAYS.find(d => d.id === selectedDay)?.label}] ${workoutName}`;
 
-            await saveManualWorkout({
-                workout_name: finalWorkoutName,
-                exercises: exercises.filter(ex => ex.name)
-            });
+            if (editId) {
+                // Update existing
+                await supabase.from('user_manual_workouts').update({ workout_name: finalWorkoutName }).eq('id', editId);
+                // Delete old logs and insert new ones (simpler than syncing)
+                await supabase.from('workout_logs').delete().eq('workout_id', editId);
+                const { data: userData } = await supabase.auth.getUser();
+                const userId = userData.user?.id;
+                const logs = exercises.filter(ex => ex.name).map(ex => ({
+                    user_id: userId,
+                    workout_id: editId,
+                    exercise_name: ex.name,
+                    sets_count: parseInt(ex.sets) || 1,
+                    reps_count: parseInt(ex.reps) || 1,
+                    weight_kg: parseFloat(ex.weight) || 0,
+                    logged_at: new Date().toISOString().split('T')[0]
+                }));
+                await supabase.from('workout_logs').insert(logs);
+                Alert.alert('Başarılı', 'Antrenman güncellendi! ✨');
+            } else {
+                const { saveManualWorkout } = await import('@/services/api');
+                await saveManualWorkout({
+                    workout_name: finalWorkoutName,
+                    exercises: exercises.filter(ex => ex.name)
+                });
+                Alert.alert('Başarılı', 'Antrenman kaydedildi! 🔥');
+            }
 
-            Alert.alert('Başarılı', 'Antrenman kaydedildi! 🔥');
             router.back();
         } catch (err: any) {
             console.error('Save error:', err);
-            Alert.alert('Hata', 'Kaydedilirken bir sorun oluştu.');
+            Alert.alert('Hata', 'İşlem sırasında bir sorun oluştu.');
         } finally {
             setLoading(false);
         }
