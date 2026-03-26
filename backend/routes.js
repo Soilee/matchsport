@@ -1598,9 +1598,20 @@ router.post('/nutrition/ai-log-meal', authMiddleware, async (req, res) => {
             return res.json({ message: 'Öğün başarıyla eklendi (Mock)', data: data });
         }
 
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        // Use gemini-1.5-pro for better stability and analysis
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+        // -- AI Call with Timeout + Retry + Fallback --
+        const callGeminiWithTimeout = async (promptText, timeoutMs = 30000) => {
+            const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+            const aiPromise = model.generateContent(promptText);
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('AI isteği zaman aşımına uğradı (30s)')), timeoutMs)
+            );
+
+            const result = await Promise.race([aiPromise, timeoutPromise]);
+            const response = await result.response;
+            return response.text();
+        };
 
         // Get user info for context
         const { data: userStats } = await db.from('users').select('height_cm, weight_kg, goal').eq('id', req.user.id).single();
@@ -1621,32 +1632,69 @@ router.post('/nutrition/ai-log-meal', authMiddleware, async (req, res) => {
           "carbs_g": sayi, 
           "fat_g": sayi, 
           "calories": sayi, 
-          "feedback": "Türkçe kısa tavsiye ve analiz. Örn: 'Bu öğün protein açısından zayıf kalmış. UYARI: Kas gelişimi için bir sonraki öğünde protein miktarını artırmalısın.'"
+          "feedback": "Türkçe kısa tavsiye ve analiz"
         }
         Cevabın sadece JSON objesi olsun, markdown blockları içermesin.`;
 
-        console.log('--- AI Meal Log Start ---');
-        console.log('Sending prompt to Gemini...');
+        let macros = null;
+        let aiSuccess = false;
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const responseText = response.text();
+        // Try AI up to 2 times
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                console.log(`--- AI Meal Log Attempt ${attempt} ---`);
+                const responseText = await callGeminiWithTimeout(prompt);
+                console.log('Gemini raw response:', responseText);
 
-        console.log('Gemini raw response:', responseText);
+                const match = responseText.match(/\{[\s\S]*\}/);
+                if (!match) {
+                    console.error('Gemini Invalid JSON:', responseText);
+                    throw new Error("AI'dan geçerli bir JSON yanıtı alınamadı");
+                }
 
-        const match = responseText.match(/\{[\s\S]*\}/);
-        if (!match) {
-            console.error('Gemini Invalid JSON:', responseText);
-            throw new Error("AI'dan geçerli bir JSON yanıtı alınamadı");
+                macros = JSON.parse(match[0]);
+                aiSuccess = true;
+                break;
+            } catch (aiErr) {
+                console.error(`AI attempt ${attempt} failed:`, aiErr.message);
+                if (attempt < 2) {
+                    console.log('Retrying in 2 seconds...');
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+            }
         }
 
-        const macros = JSON.parse(match[0]);
+        // Fallback: If AI completely fails, do a basic estimation  
+        if (!macros) {
+            console.warn('All AI attempts failed. Using smart fallback estimation.');
+            // Basic estimation based on text length and common Turkish meal keywords
+            const lowerText = text.toLowerCase();
+            let baseCalories = 350;
+            let baseProtein = 20;
+            let baseCarbs = 40;
+            let baseFat = 12;
+
+            if (lowerText.includes('tavuk') || lowerText.includes('chicken')) { baseProtein = 35; baseCalories = 400; }
+            if (lowerText.includes('pilav') || lowerText.includes('makarna') || lowerText.includes('ekmek')) { baseCarbs = 60; baseCalories = 450; }
+            if (lowerText.includes('salata')) { baseCalories = 150; baseProtein = 5; baseCarbs = 15; baseFat = 8; }
+            if (lowerText.includes('yumurta') || lowerText.includes('egg')) { baseProtein = 18; baseFat = 15; baseCalories = 250; }
+            if (lowerText.includes('et') || lowerText.includes('köfte')) { baseProtein = 40; baseFat = 20; baseCalories = 500; }
+            if (lowerText.includes('süt') || lowerText.includes('yoğurt')) { baseProtein = 12; baseCalories = 180; }
+
+            macros = {
+                protein_g: baseProtein,
+                carbs_g: baseCarbs,
+                fat_g: baseFat,
+                calories: baseCalories,
+                feedback: '⚠️ Yapay zeka şu an yanıt veremedi, değerler tahmini olarak hesaplandı. Daha sonra tekrar deneyebilirsin.'
+            };
+        }
 
         const { data, error: insertError } = await db.from('nutrition_logs').insert({
             user_id: req.user.id,
             raw_text: text,
             meal_type: mealTypeStr,
-            quantity_g: 100, // Dummy value
+            quantity_g: 100,
             protein_g: macros.protein_g,
             carbs_g: macros.carbs_g,
             fat_g: macros.fat_g,
@@ -1660,7 +1708,7 @@ router.post('/nutrition/ai-log-meal', authMiddleware, async (req, res) => {
             throw new Error(`Veritabanı kayıt hatası: ${insertError.message}`);
         }
 
-        // Background history (don't await strictly to not block return)
+        // Background history
         db.from('ai_macro_logs').insert({
             user_id: req.user.id,
             raw_text: text,
@@ -1669,24 +1717,14 @@ router.post('/nutrition/ai-log-meal', authMiddleware, async (req, res) => {
             fat_g: macros.fat_g,
             calories: macros.calories
         }).then(({ error }) => {
-            if (error) console.error('Supabase Insert Error (ai_macro_logs):', error);
+            if (error) console.error('ai_macro_logs insert error:', error);
         });
 
-        console.log('--- AI Meal Log Success ---');
-        res.json({ message: 'Öğün başarıyla eklendi', data: data });
+        const msg = aiSuccess ? 'Öğün başarıyla eklendi' : 'Öğün tahmini değerlerle eklendi (AI geçici olarak yanıt vermedi)';
+        res.json({ message: msg, data: data });
     } catch (err) {
-        console.error('--- AI Meal Log Error ---');
-        console.error('Detailed Error Object:', err);
-
-        let errorMessage = 'Bilinmeyen AI hatası';
-        if (err.message) {
-            if (err.message.includes('429')) errorMessage = 'Yapay zeka yoğunluk nedeniyle şu an cevap veremiyor (429). Lütfen 1 dakika sonra tekrar deneyin.';
-            else if (err.message.includes('401')) errorMessage = 'Yapay zeka yetkilendirme hatası (401). Lütfen API anahtarını kontrol edin.';
-            else if (err.message.includes('fetch')) errorMessage = 'Google API servisine ulaşılamıyor. Lütfen internet bağlantınızı veya sunucu ayarlarını kontrol edin.';
-            else errorMessage = err.message;
-        }
-
-        res.status(500).json({ error: `Öğün eklenemedi: ${errorMessage}` });
+        console.error('--- AI Meal Log Fatal Error ---', err);
+        res.status(500).json({ error: `Öğün eklenemedi: ${err.message || 'Bilinmeyen hata'}` });
     }
 });
 

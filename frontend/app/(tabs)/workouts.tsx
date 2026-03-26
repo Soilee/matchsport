@@ -163,14 +163,209 @@ export default function WorkoutsScreen() {
         'mon': 'Pzt', 'tue': 'Sal', 'wed': 'Çar', 'thu': 'Per', 'fri': 'Cum', 'sat': 'Cmt', 'sun': 'Paz'
     };
 
-    const selectedDay = days.find(d => d.id === selectedDayId);
+    // Generate week days with dates for the tab bar
+    const getWeekDays = () => {
+        const now = new Date();
+        const dayOfWeek = now.getDay();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1)); // Monday start
+
+        const weekDays = [];
+        const dayLabels = ['PZT', 'SAL', 'ÇAR', 'PER', 'CUM', 'CMT', 'PAZ'];
+        const dayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(startOfWeek);
+            d.setDate(startOfWeek.getDate() + i);
+            weekDays.push({
+                label: dayLabels[i],
+                key: dayKeys[i],
+                date: d.getDate(),
+                isToday: d.toDateString() === now.toDateString(),
+                dayData: days.find(dd => dd.day_of_week === dayKeys[i])
+            });
+        }
+        return weekDays;
+    };
+
+    const weekDays = getWeekDays();
+
+    // Set completion tracking (local state for UI)
+    const [completedSets, setCompletedSets] = useState<Record<string, number>>({});
+
+    const handleSetComplete = (exerciseId: string, totalSets: number) => {
+        setCompletedSets(prev => {
+            const current = prev[exerciseId] || 0;
+            if (current >= totalSets) return { ...prev, [exerciseId]: 0 };
+            return { ...prev, [exerciseId]: current + 1 };
+        });
+    };
 
     const renderWorkoutContent = () => {
+        const selectedDay = days.find(d => d.id === selectedDayId);
+        const totalExercises = selectedDay?.exercises?.length || 0;
+        const totalSets = selectedDay?.exercises?.reduce((sum: number, ex: Exercise) => sum + (ex.sets || 0), 0) || 0;
+        const completedSetsCount = selectedDay?.exercises?.reduce((sum: number, ex: Exercise) => sum + (completedSets[ex.id] || 0), 0) || 0;
+
         return (
             <View>
-                {/* 2. Hybrid Actions (Smart Visibility) */}
+                {/* Week Day Tabs */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 8, gap: 6, marginBottom: 20 }}>
+                    {weekDays.map(wd => {
+                        const isSelected = wd.dayData?.id === selectedDayId;
+                        const hasWorkout = !!wd.dayData;
+                        return (
+                            <TouchableOpacity
+                                key={wd.key}
+                                style={[styles.weekDayTab, isSelected && styles.weekDayTabActive, wd.isToday && !isSelected && styles.weekDayTabToday]}
+                                onPress={() => wd.dayData && setSelectedDayId(wd.dayData.id)}
+                                disabled={!hasWorkout}
+                            >
+                                <Text style={[styles.weekDayLabel, isSelected && styles.weekDayLabelActive, !hasWorkout && { opacity: 0.3 }]}>{wd.label}</Text>
+                                <Text style={[styles.weekDayDate, isSelected && styles.weekDayDateActive, !hasWorkout && { opacity: 0.3 }]}>{wd.date}</Text>
+                                {wd.isToday && <View style={[styles.todayDot, isSelected && { backgroundColor: '#fff' }]} />}
+                            </TouchableOpacity>
+                        );
+                    })}
+                </ScrollView>
+
+                {/* Workout Summary Header */}
+                {selectedDay && (
+                    <Card style={styles.workoutSummaryCard}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                <View style={styles.workoutIcon}>
+                                    <Ionicons name="barbell" size={22} color={Colors.primary} />
+                                </View>
+                                <View>
+                                    <Text style={styles.workoutSummaryTitle}>{selectedDay.muscle_group || 'Antrenman'}</Text>
+                                    <Text style={styles.workoutSummarySubtitle}>{dayMap[selectedDay.day_of_week]}</Text>
+                                </View>
+                            </View>
+                            <TouchableOpacity
+                                style={styles.completeHeaderBtn}
+                                onPress={async () => {
+                                    try {
+                                        setLoading(true);
+                                        const { completeWorkoutDay } = await import('@/services/api');
+                                        await completeWorkoutDay(selectedDay.id);
+                                        Alert.alert('Tebrikler! 🔥', 'Antrenman tamamlandı, serin güncellendi!');
+                                        loadData();
+                                    } catch (error: any) {
+                                        Alert.alert('Hata', error?.response?.data?.error || 'Kayıt sırasında bir hata oluştu.');
+                                    } finally {
+                                        setLoading(false);
+                                    }
+                                }}
+                                disabled={loading}
+                            >
+                                <Text style={styles.completeHeaderBtnText}>Tamamla</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Progress Overview */}
+                        <View style={styles.progressOverview}>
+                            <View style={styles.progressRow}>
+                                <Text style={styles.progressLabel}>Tamamlanan Hareketler:</Text>
+                                <Text style={styles.progressValue}>{Object.values(completedSets).filter((v, i) => {
+                                    const ex = selectedDay.exercises[i];
+                                    return ex && v >= ex.sets;
+                                }).length} / {totalExercises}</Text>
+                            </View>
+                            <View style={styles.progressRow}>
+                                <Text style={styles.progressLabel}>Tamamlanan Setler:</Text>
+                                <Text style={styles.progressValue}>{completedSetsCount} / {totalSets}</Text>
+                            </View>
+                            <View style={styles.progressBarBg}>
+                                <View style={[styles.progressBarFill, { width: totalSets > 0 ? `${(completedSetsCount / totalSets) * 100}%` : '0%' }]} />
+                            </View>
+                        </View>
+                    </Card>
+                )}
+
+                {/* Exercise Cards */}
+                {selectedDay ? (
+                    <View style={styles.exercisesList}>
+                        {selectedDay.exercises.map((ex: Exercise, idx: number) => {
+                            const done = completedSets[ex.id] || 0;
+                            const progress = ex.sets > 0 ? done / ex.sets : 0;
+
+                            return (
+                                <Card key={ex.id} style={styles.exerciseCardNew}>
+                                    <View style={styles.exerciseCardRow}>
+                                        {/* Exercise Icon */}
+                                        <View style={styles.exerciseIconBox}>
+                                            <Ionicons name="fitness" size={28} color={Colors.primary} />
+                                        </View>
+
+                                        {/* Exercise Info */}
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.exerciseNameNew}>{ex.name}</Text>
+                                            <Text style={styles.exerciseMetaNew}>{ex.sets} Set {ex.reps} Tekrar</Text>
+                                            {ex.equipment && <Text style={styles.exerciseEquipment}>Alet: {ex.equipment}</Text>}
+
+                                            {/* Mini Progress Bar */}
+                                            <View style={styles.miniProgressBg}>
+                                                <View style={[styles.miniProgressFill, { width: `${progress * 100}%` }]} />
+                                            </View>
+                                        </View>
+
+                                        {/* Set Counter + Yap Button */}
+                                        <View style={styles.setActionArea}>
+                                            <Text style={styles.setCounterText}>{done}/{ex.sets} Set</Text>
+                                            <TouchableOpacity
+                                                style={[styles.yapBtn, done >= ex.sets && styles.yapBtnDone]}
+                                                onPress={() => handleSetComplete(ex.id, ex.sets)}
+                                            >
+                                                <Text style={styles.yapBtnText}>{done >= ex.sets ? '✓' : 'Yap'}</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+
+                                    {/* How-to Button */}
+                                    <TouchableOpacity
+                                        style={styles.howToBtnNew}
+                                        onPress={() => Alert.alert('Nasıl Yapılır?', `${ex.name} hareketi için video hazırlıyoruz! ✨`)}
+                                    >
+                                        <Ionicons name="videocam-outline" size={16} color={Colors.primary} />
+                                        <Text style={styles.howToBtnText}>Nasıl Yapılır?</Text>
+                                    </TouchableOpacity>
+                                </Card>
+                            );
+                        })}
+
+                        {/* Big Complete Button */}
+                        <TouchableOpacity
+                            style={styles.completeWorkoutBtn}
+                            onPress={async () => {
+                                try {
+                                    setLoading(true);
+                                    const { completeWorkoutDay } = await import('@/services/api');
+                                    await completeWorkoutDay(selectedDay.id);
+                                    Alert.alert('Tebrikler! 🔥', 'Antrenman tamamlandı, serin güncellendi!');
+                                    loadData();
+                                } catch (error: any) {
+                                    Alert.alert('Hata', error?.response?.data?.error || 'Kayıt sırasında bir hata oluştu.');
+                                } finally {
+                                    setLoading(false);
+                                }
+                            }}
+                            disabled={loading}
+                        >
+                            <Ionicons name="flame" size={24} color="#fff" />
+                            <Text style={styles.completeWorkoutBtnText}>ANTRENMANI BİTİRDİM</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : (
+                    <View style={styles.emptyState}>
+                        <Ionicons name="barbell-outline" size={64} color={Colors.textMuted} />
+                        <Text style={styles.emptyText}>Bu gün için antrenman programı yok.</Text>
+                    </View>
+                )}
+
+                {/* Manual Entry Button (Smart Visibility) */}
                 {(!program && !manualWorkouts.some(mw => new Date(mw.created_at).toDateString() === new Date().toDateString())) && (
-                    <View style={styles.hybridActions}>
+                    <View style={[styles.hybridActions, { marginTop: 20 }]}>
                         <TouchableOpacity style={styles.manualEntryBtn} onPress={() => router.push('/workouts/manual' as any)}>
                             <Ionicons name="add-circle" size={24} color="#fff" />
                             <Text style={styles.manualEntryText}>Kendi Antrenmanını Gir</Text>
@@ -178,96 +373,7 @@ export default function WorkoutsScreen() {
                     </View>
                 )}
 
-                {/* 3. Official Exercise List (Accordion Style) */}
-                <View style={styles.exercisesList}>
-                    {days.map((day, dIdx) => {
-                        const isExpanded = selectedDayId === day.id;
-                        return (
-                            <View key={day.id} style={{ marginBottom: 12 }}>
-                                <TouchableOpacity
-                                    style={[styles.accordionHeader, isExpanded && styles.accordionHeaderActive]}
-                                    onPress={() => setSelectedDayId(isExpanded ? null : day.id)}
-                                >
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                                        <View style={[styles.dayCircle, isExpanded && styles.dayCircleActive]}>
-                                            <Text style={[styles.dayCircleText, isExpanded && styles.dayCircleTextActive]}>
-                                                {dayMap[day.day_of_week] || day.day_of_week}
-                                            </Text>
-                                        </View>
-                                        <View>
-                                            <Text style={styles.muscleText}>{day.muscle_group || 'Dinlenme Günü'}</Text>
-                                            <Text style={styles.exerciseCountText}>{day.exercises?.length || 0} Hareket</Text>
-                                        </View>
-                                    </View>
-                                    <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={20} color={isExpanded ? "#fff" : Colors.textMuted} />
-                                </TouchableOpacity>
-
-                                {isExpanded && (
-                                    <View style={styles.accordionContent}>
-                                        {day.exercises.map((ex: Exercise, idx: number) => (
-                                            <Card key={ex.id} style={styles.exerciseCard}>
-                                                <View style={styles.exerciseHeader}>
-                                                    <View style={styles.exerciseNumber}>
-                                                        <Text style={styles.exerciseNumberText}>{idx + 1}</Text>
-                                                    </View>
-                                                    <View style={styles.exerciseInfo}>
-                                                        <Text style={styles.exerciseName}>{ex.name}</Text>
-                                                        <Text style={styles.exerciseDetails}>
-                                                            {ex.equipment} • {ex.rest_seconds}s Dinlenme
-                                                        </Text>
-                                                    </View>
-                                                    <TouchableOpacity style={styles.howToBtn} onPress={() => Alert.alert('Nasıl Yapılır?', `${ex.name} hareketi için video hazırlıyoruz! ✨`)}>
-                                                        <Ionicons name="videocam-outline" size={20} color={Colors.primary} />
-                                                    </TouchableOpacity>
-                                                </View>
-                                                <View style={styles.setsInfo}>
-                                                    <View style={styles.setStat}>
-                                                        <Text style={styles.statVal}>{ex.sets}</Text>
-                                                        <Text style={styles.statLabel}>Set</Text>
-                                                    </View>
-                                                    <View style={styles.statDivider} />
-                                                    <View style={styles.setStat}>
-                                                        <Text style={styles.statVal}>{ex.reps}</Text>
-                                                        <Text style={styles.statLabel}>Tekrar</Text>
-                                                    </View>
-                                                    <View style={styles.statDivider} />
-                                                    <View style={styles.setStat}>
-                                                        <Text style={styles.statVal}>{ex.weight_kg}</Text>
-                                                        <Text style={styles.statLabel}>kg</Text>
-                                                    </View>
-                                                </View>
-                                            </Card>
-                                        ))}
-
-                                        {/* Complete Day Button */}
-                                        <TouchableOpacity
-                                            style={styles.completeWorkoutBtn}
-                                            onPress={async () => {
-                                                try {
-                                                    setLoading(true);
-                                                    const { completeWorkoutDay } = await import('@/services/api');
-                                                    await completeWorkoutDay(day.id);
-                                                    Alert.alert('Tebrikler!', 'Antrenman tamamlandı, serin güncellendi! 🔥');
-                                                    loadData();
-                                                } catch (error: any) {
-                                                    Alert.alert('Hata', error?.response?.data?.error || 'Kayıt sırasında bir hata oluştu.');
-                                                } finally {
-                                                    setLoading(false);
-                                                }
-                                            }}
-                                            disabled={loading}
-                                        >
-                                            <Ionicons name="flame" size={24} color="#fff" />
-                                            <Text style={styles.completeWorkoutBtnText}>GÜNÜ BİTİRDİM</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                )}
-                            </View>
-                        );
-                    })}
-                </View>
-
-                {/* 4. Manual History (NEW) */}
+                {/* 4. Manual History */}
                 {manualWorkouts.length > 0 && (
                     <View style={{ marginTop: 24 }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -311,6 +417,7 @@ export default function WorkoutsScreen() {
             </View>
         );
     };
+
 
     const renderDietContent = () => {
         if (!diet) {
@@ -924,7 +1031,7 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '700',
     },
-    // Accordion Styles
+    // Accordion Styles (kept for backward compat)
     accordionHeader: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -982,6 +1089,200 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255, 107, 53, 0.1)',
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    // New Week Day Tabs
+    weekDayTab: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        borderRadius: 16,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        minWidth: 52,
+        gap: 2,
+    },
+    weekDayTabActive: {
+        backgroundColor: Colors.primary,
+    },
+    weekDayTabToday: {
+        borderWidth: 1,
+        borderColor: Colors.primary,
+    },
+    weekDayLabel: {
+        color: Colors.textMuted,
+        fontSize: 10,
+        fontWeight: '700',
+        letterSpacing: 0.5,
+    },
+    weekDayLabelActive: {
+        color: '#fff',
+    },
+    weekDayDate: {
+        color: Colors.text,
+        fontSize: 18,
+        fontWeight: '900',
+    },
+    weekDayDateActive: {
+        color: '#fff',
+    },
+    todayDot: {
+        width: 5,
+        height: 5,
+        borderRadius: 3,
+        backgroundColor: Colors.primary,
+        marginTop: 2,
+    },
+    // Workout Summary Card
+    workoutSummaryCard: {
+        padding: 16,
+        marginBottom: 16,
+    },
+    workoutIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255, 107, 53, 0.1)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    workoutSummaryTitle: {
+        color: Colors.text,
+        fontSize: 18,
+        fontWeight: '800',
+    },
+    workoutSummarySubtitle: {
+        color: Colors.textMuted,
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    completeHeaderBtn: {
+        backgroundColor: Colors.primary,
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 12,
+    },
+    completeHeaderBtnText: {
+        color: '#fff',
+        fontWeight: '800',
+        fontSize: 14,
+    },
+    progressOverview: {
+        marginTop: 16,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255, 255, 255, 0.05)',
+    },
+    progressRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 4,
+    },
+    progressLabel: {
+        color: Colors.textMuted,
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    progressValue: {
+        color: Colors.text,
+        fontSize: 12,
+        fontWeight: '800',
+    },
+    progressBarBg: {
+        height: 6,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderRadius: 3,
+        marginTop: 8,
+        overflow: 'hidden',
+    },
+    progressBarFill: {
+        height: '100%',
+        backgroundColor: Colors.primary,
+        borderRadius: 3,
+    },
+    // New Exercise Cards
+    exerciseCardNew: {
+        padding: 16,
+        marginBottom: 8,
+    },
+    exerciseCardRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    exerciseIconBox: {
+        width: 52,
+        height: 52,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255, 107, 53, 0.08)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    exerciseNameNew: {
+        color: Colors.text,
+        fontSize: 15,
+        fontWeight: '700',
+        marginBottom: 2,
+    },
+    exerciseMetaNew: {
+        color: Colors.textMuted,
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    exerciseEquipment: {
+        color: Colors.textMuted,
+        fontSize: 11,
+        marginTop: 2,
+    },
+    miniProgressBg: {
+        height: 4,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderRadius: 2,
+        marginTop: 8,
+        overflow: 'hidden',
+    },
+    miniProgressFill: {
+        height: '100%',
+        backgroundColor: Colors.primary,
+        borderRadius: 2,
+    },
+    setActionArea: {
+        alignItems: 'center',
+        gap: 6,
+    },
+    setCounterText: {
+        color: Colors.textMuted,
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    yapBtn: {
+        backgroundColor: Colors.primary,
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 10,
+        minWidth: 60,
+        alignItems: 'center',
+    },
+    yapBtnDone: {
+        backgroundColor: Colors.success || '#4CAF50',
+    },
+    yapBtnText: {
+        color: '#fff',
+        fontWeight: '800',
+        fontSize: 14,
+    },
+    howToBtnNew: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 10,
+        paddingTop: 10,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255, 255, 255, 0.03)',
+    },
+    howToBtnText: {
+        color: Colors.primary,
+        fontSize: 12,
+        fontWeight: '600',
     },
     exercisesList: {
         gap: 8,
