@@ -686,7 +686,7 @@ router.post('/workouts/complete-day', authMiddleware, async (req, res) => {
         await db.from('workout_completions').insert({
             user_id: userId,
             workout_day_id,
-            completed_at: today
+            logged_at: today
         });
 
         const { data: user } = await db.from('users').select('current_streak, best_streak, last_activity_date').eq('id', userId).single();
@@ -751,7 +751,8 @@ router.post('/workouts/manual', authMiddleware, async (req, res) => {
                 exercise_name: ex.name,
                 sets_count: parseInt(ex.sets) || 1,
                 reps_count: parseInt(ex.reps) || 1,
-                weight_kg: parseFloat(ex.weight) || 0
+                weight_kg: parseFloat(ex.weight) || 0,
+                logged_at: new Date().toISOString().split('T')[0]
             }));
             const { error: lErr } = await db.from('workout_logs').insert(logs);
             if (lErr) throw lErr;
@@ -802,23 +803,7 @@ router.get('/measurements', authMiddleware, async (req, res) => {
     }
 });
 
-router.get('/diet', authMiddleware, async (req, res) => {
-    try {
-        const { data } = await getDb().from('diet_plans').select('*').eq('user_id', req.user.id).eq('is_active', true).order('created_at', { ascending: false }).limit(1).maybeSingle();
-        res.json(data || {});
-    } catch (err) {
-        res.status(500).json({ error: 'Diyet planı yüklenemedi' });
-    }
-});
-
-router.get('/tasks', authMiddleware, async (req, res) => {
-    try {
-        const { data } = await getDb().from('daily_tasks').select('*').order('created_at', { ascending: false });
-        res.json(data || []);
-    } catch (err) {
-        res.status(500).json({ error: 'Görevler yüklenemedi' });
-    }
-});
+// Diet plans, measurements and tasks are handled by dedicated routes further down.
 
 router.post('/tasks/:id/complete', authMiddleware, async (req, res) => {
     try {
@@ -1549,7 +1534,8 @@ router.post('/nutrition', authMiddleware, async (req, res) => {
         const { data } = await db.from('nutrition_logs').insert(entry).select().single();
         res.json(data);
     } catch (err) {
-        res.status(500).json({ error: 'Kayıt başarısız' });
+        console.error('Nutrition Log Error:', err);
+        res.status(500).json({ error: 'Kayıt başarısız: ' + (err.message || '') });
     }
 });
 
@@ -1557,11 +1543,12 @@ router.get('/nutrition/daily', authMiddleware, async (req, res) => {
     try {
         const today = new Date().toISOString().split('T')[0];
         const { data } = await getDb().from('nutrition_logs')
-            .select('*, food_items(name)')
+            .select('*')
             .eq('user_id', req.user.id)
-            .eq('log_date', today);
+            .eq('logged_at', today);
         res.json(data || []);
     } catch (err) {
+        console.error('Nutrition Daily Error:', err);
         res.status(500).json({ error: 'Günlük veri yüklenemedi' });
     }
 });
@@ -1570,12 +1557,13 @@ router.get('/admin/user-nutrition/:id', authMiddleware, requireRole('admin', 'tr
     try {
         const { id } = req.params;
         const { data } = await getDb().from('nutrition_logs')
-            .select('*, food_items(name)')
+            .select('*')
             .eq('user_id', id)
-            .order('log_date', { ascending: false })
+            .order('logged_at', { ascending: false })
             .limit(50);
         res.json(data || []);
     } catch (err) {
+        console.error('Admin Nutrition Error:', err);
         res.status(500).json({ error: 'Kullanıcı verisi yüklenemedi' });
     }
 });
@@ -1653,13 +1641,17 @@ router.post('/nutrition/ai-log-meal', authMiddleware, async (req, res) => {
             fat_g: macros.fat_g,
             calories: macros.calories,
             ai_feedback: macros.feedback || null,
-            log_date: today
+            logged_at: today
         }).select().single();
 
-        // Background history (exclude feedback since ai_macro_logs table might not have it)
-        const { feedback, ...macrosToLog } = macros;
+        // Background history
         await db.from('ai_macro_logs').insert({
-            user_id: req.user.id, raw_text: text, ...macrosToLog
+            user_id: req.user.id,
+            raw_text: text,
+            protein_g: macros.protein_g,
+            carbs_g: macros.carbs_g,
+            fat_g: macros.fat_g,
+            calories: macros.calories
         });
 
         res.json({ message: 'Öğün başarıyla eklendi', data: data });
@@ -1813,6 +1805,7 @@ router.post('/admin/pay-installment/:id', authMiddleware, async (req, res) => {
 
         res.json({ message: 'Taksit ödendi olarak işaretlendi' });
     } catch (err) {
+        console.error('Pay Installment Admin Error:', err);
         res.status(500).json({ error: 'İşlem başarısız' });
     }
 });
