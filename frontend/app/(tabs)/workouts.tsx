@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, RefreshControl, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Modal } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -131,20 +132,26 @@ const styles = StyleSheet.create({
         marginBottom: 24,
     },
     manualEntryBtn: {
+        borderRadius: 16,
+        overflow: 'hidden',
+        elevation: 8,
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+    },
+    manualEntryGradient: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
         padding: 16,
-        borderRadius: 16,
         gap: 12,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
     },
     manualEntryText: {
         color: '#fff',
-        fontSize: 15,
-        fontWeight: '700',
+        fontSize: 16,
+        fontWeight: '800',
+        letterSpacing: 0.5,
     },
     // Accordion Styles (kept for backward compat)
     accordionHeader: {
@@ -173,6 +180,8 @@ const styles = StyleSheet.create({
     },
     dayCircleActive: {
         backgroundColor: Colors.primary,
+        borderWidth: 2,
+        borderColor: 'rgba(255, 255, 255, 0.2)',
     },
     dayCircleText: {
         color: Colors.textMuted,
@@ -181,6 +190,7 @@ const styles = StyleSheet.create({
     },
     dayCircleTextActive: {
         color: '#fff',
+        textTransform: 'uppercase',
     },
     exerciseCountText: {
         color: Colors.textMuted,
@@ -1108,9 +1118,16 @@ export default function WorkoutsScreen() {
                 {!hasCoachProgram && (
                     <>
                         {/* Always visible Add button */}
-                        <TouchableOpacity style={styles.manualEntryBtn} onPress={() => router.push('/workouts/manual' as any)}>
-                            <Ionicons name="add-circle" size={24} color="#fff" />
-                            <Text style={styles.manualEntryText}>Kendi Antrenmanını Gir</Text>
+                        <TouchableOpacity style={styles.manualEntryBtn} onPress={() => router.push('/workouts/manual' as any)} activeOpacity={0.8}>
+                            <LinearGradient
+                                colors={[Colors.primary, '#FF8C42']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.manualEntryGradient}
+                            >
+                                <Ionicons name="add-circle" size={24} color="#fff" />
+                                <Text style={styles.manualEntryText}>Kendi Antrenmanını Gir</Text>
+                            </LinearGradient>
                         </TouchableOpacity>
 
                         {/* Manual Workouts - Expandable Cards */}
@@ -1295,11 +1312,13 @@ export default function WorkoutsScreen() {
                                     </>
                                 )}
                             </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.dietAiBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: Colors.primary, marginTop: 12 }]}
-                                onPress={() => setIsManualDietMode(true)}
-                            >
-                                <Text style={[styles.dietAiBtnText, { color: Colors.primary }]}>Diyetimi Kendim Gireceğim</Text>
+                            <TouchableOpacity style={styles.manualEntryBtn} onPress={() => setIsManualDietMode(true)}>
+                                <LinearGradient
+                                    colors={['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.08)']}
+                                    style={[styles.manualEntryGradient, { borderWidth: 1, borderColor: Colors.primary }]}
+                                >
+                                    <Text style={[styles.dietAiBtnText, { color: Colors.primary }]}>Diyetimi Kendim Gireceğim</Text>
+                                </LinearGradient>
                             </TouchableOpacity>
                         </Card>
                     </View>
@@ -1425,9 +1444,16 @@ export default function WorkoutsScreen() {
                     </TouchableWithoutFeedback>
                 </Modal>
 
-                <TouchableOpacity style={styles.addFoodBtn} onPress={() => setIsLogging(true)}>
-                    <Ionicons name="add-circle" size={24} color="#fff" />
-                    <Text style={styles.addFoodText}>Yediklerini Kaydet</Text>
+                <TouchableOpacity style={styles.manualEntryBtn} onPress={() => setIsLogging(true)}>
+                    <LinearGradient
+                        colors={[Colors.primary, '#FF8C42']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.manualEntryGradient}
+                    >
+                        <Ionicons name="add-circle" size={24} color="#fff" />
+                        <Text style={styles.addFoodText}>Yediklerini Kaydet</Text>
+                    </LinearGradient>
                 </TouchableOpacity>
 
                 {/* 3. History */}

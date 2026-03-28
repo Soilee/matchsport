@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -126,12 +127,17 @@ export default function ManualWorkoutScreen() {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
             <SafeAreaView style={styles.container}>
                 <View style={styles.header}>
-                    <TouchableOpacity onPress={() => router.back()}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
                         <Ionicons name="chevron-back" size={28} color={Colors.text} />
                     </TouchableOpacity>
-                    <Text style={styles.title}>Yeni Antrenman Girişi</Text>
-                    <TouchableOpacity onPress={saveWorkout} disabled={loading}>
-                        <Text style={[styles.saveBtn, loading && { opacity: 0.5 }]}>KAYDET</Text>
+                    <Text style={styles.title}>Yeni Antrenman</Text>
+                    <TouchableOpacity onPress={saveWorkout} disabled={loading} style={styles.saveBtnContainer}>
+                        <LinearGradient
+                            colors={[Colors.primary, '#FF8C42']}
+                            style={styles.saveBtnGradient}
+                        >
+                            <Text style={[styles.saveBtnText, loading && { opacity: 0.7 }]}>KAYDET</Text>
+                        </LinearGradient>
                     </TouchableOpacity>
                 </View>
 
@@ -206,9 +212,14 @@ export default function ManualWorkoutScreen() {
                         </Card>
                     ))}
 
-                    <TouchableOpacity style={styles.addExerciseBtn} onPress={addExercise}>
-                        <Ionicons name="add-circle-outline" size={24} color={Colors.primary} />
-                        <Text style={styles.addExerciseText}>Hareket Ekle</Text>
+                    <TouchableOpacity style={styles.addExerciseBtn} onPress={addExercise} activeOpacity={0.7}>
+                        <LinearGradient
+                            colors={['rgba(255, 107, 53, 0.1)', 'rgba(255, 107, 53, 0.05)']}
+                            style={styles.addExerciseGradient}
+                        >
+                            <Ionicons name="add-circle-outline" size={22} color={Colors.primary} />
+                            <Text style={styles.addExerciseText}>Yeni Hareket Ekle</Text>
+                        </LinearGradient>
                     </TouchableOpacity>
                 </ScrollView>
             </SafeAreaView>
@@ -234,9 +245,26 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '700',
     },
-    saveBtn: {
-        color: Colors.primary,
-        fontWeight: 'bold',
+    saveBtnContainer: {
+        borderRadius: 12,
+        overflow: 'hidden',
+    },
+    saveBtnGradient: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+    },
+    saveBtnText: {
+        color: '#fff',
+        fontWeight: '900',
+        fontSize: 13,
+    },
+    backBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.03)',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     scrollContent: {
         padding: 20,
@@ -312,19 +340,23 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     addExerciseBtn: {
+        marginTop: 12,
+        borderRadius: 16,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 107, 53, 0.3)',
+        borderStyle: 'dashed',
+    },
+    addExerciseGradient: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
-        marginTop: 12,
-        paddingVertical: 12,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 107, 53, 0.3)',
-        borderRadius: 12,
-        borderStyle: 'dashed',
+        paddingVertical: 14,
     },
     addExerciseText: {
         color: Colors.primary,
-        fontWeight: '600',
+        fontWeight: '800',
+        fontSize: 15,
     },
 });
