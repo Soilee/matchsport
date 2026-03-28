@@ -1,5 +1,5 @@
 -- MatchSport Nutrition Final Fix
--- Overwritten to redirect to final fix
+-- Run this in Supabase SQL Editor to resolve the 'logged_at' and macro columns error
 
 DO $$ 
 BEGIN
