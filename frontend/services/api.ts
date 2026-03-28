@@ -176,5 +176,8 @@ export const saveManualWorkout = (data: any) => safePost<any>('/workouts/manual'
 export const getInstallments = () => safeGet<any[]>('/user/installments');
 export const adminGetUserInstallments = (userId: string) => safeGet<any[]>(`/admin/user-installments/${userId}`);
 export const adminPayInstallment = (instId: string) => api.put(`/admin/installments/${instId}/pay`).then(r => r.data);
+export const adminGetActiveOccupancy = () => safeGet<any[]>('/admin/occupancy/active');
+export const adminForceCheckout = (sessionId: string) => safePost<any>(`/admin/occupancy/force-checkout/${sessionId}`);
+export const adminGetUserLogs = (userId: string) => safeGet<any[]>(`/admin/user-logs/${userId}`);
 
 export default api;

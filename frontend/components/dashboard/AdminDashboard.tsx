@@ -5,6 +5,7 @@ import Card from '@/components/common/Card';
 import { Ionicons } from '@expo/vector-icons';
 import { Svg, Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { adminPayInstallment } from '@/services/api';
+import GymManagementModal from './GymManagementModal';
 
 interface Installment {
     id: string;
@@ -29,6 +30,7 @@ interface Props {
 
 export default function AdminDashboard({ adminStats, occupancy, onRefresh }: Props) {
     const [approvingId, setApprovingId] = useState<string | null>(null);
+    const [isGymModalVisible, setIsGymModalVisible] = useState(false);
 
     const screenWidth = Dimensions.get('window').width - 72;
     const chartHeight = 80;
@@ -119,8 +121,23 @@ export default function AdminDashboard({ adminStats, occupancy, onRefresh }: Pro
                         </Text>
                         <Text style={styles.occSub}>Maksimum kapasite: {occupancy.max_capacity}</Text>
                     </View>
+                    <TouchableOpacity
+                        style={styles.manageBtn}
+                        onPress={() => setIsGymModalVisible(true)}
+                    >
+                        <Ionicons name="settings-outline" size={20} color={Colors.primary} />
+                        <Text style={styles.manageBtnText}>Yönet</Text>
+                    </TouchableOpacity>
                 </View>
             </Card>
+
+            <GymManagementModal
+                visible={isGymModalVisible}
+                onClose={() => {
+                    setIsGymModalVisible(false);
+                    if (onRefresh) onRefresh();
+                }}
+            />
 
             <Card title="Gelir Trendi" style={styles.fullCard}>
                 <View style={styles.chartContainer}>
@@ -259,6 +276,22 @@ const styles = StyleSheet.create({
     occSub: {
         color: Colors.textMuted,
         fontSize: 13,
+    },
+    manageBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
+        backgroundColor: 'rgba(255, 107, 53, 0.1)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 107, 53, 0.2)',
+    },
+    manageBtnText: {
+        color: Colors.primary,
+        fontSize: 14,
+        fontWeight: '700',
     },
     chartContainer: {
         marginTop: 20,

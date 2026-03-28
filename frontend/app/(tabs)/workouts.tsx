@@ -1362,9 +1362,12 @@ export default function WorkoutsScreen() {
             calories: acc.calories + (curr.calories || 0)
         }), { protein: 0, carbs: 0, fat: 0, calories: 0 });
 
-        // Group by date
+        // Group by date - Only show today's logs for the user view (Daily Reset)
+        const todayStr = new Date().toISOString().split('T')[0];
         const grouped = nutritionLogs.reduce((acc, log) => {
-            const date = log.log_date;
+            const date = log.logged_at || log.log_date || todayStr;
+            if (date !== todayStr) return acc; // Daily reset: only show today
+
             if (!acc[date]) acc[date] = [];
             acc[date].push(log);
             return acc;

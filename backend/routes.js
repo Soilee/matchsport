@@ -654,7 +654,6 @@ router.get('/admin/turnstile/config', authMiddleware, async (req, res) => {
 });
 
 // =================== LIVE OCCUPANCY ===================
-
 router.get('/occupancy/live', authMiddleware, async (req, res) => {
     try {
         const db = getDb();
@@ -664,6 +663,63 @@ router.get('/occupancy/live', authMiddleware, async (req, res) => {
         res.json({ current_count: count || 0 });
     } catch (err) {
         res.status(500).json({ error: 'Doluluk verisi alınamadı' });
+    }
+});
+
+// Admin: Get active people in the gym
+router.get('/admin/occupancy/active', authMiddleware, requireRole('admin', 'superadmin'), async (req, res) => {
+    try {
+        const db = getDb();
+        const { data, error } = await db.from('check_ins')
+            .select(`
+                id,
+                check_in_time,
+                users (
+                    id,
+                    full_name,
+                    profile_photo_url
+                )
+            `)
+            .is('check_out_time', null)
+            .order('check_in_time', { ascending: false });
+
+        if (error) throw error;
+        res.json(data || []);
+    } catch (err) {
+        console.error('Active Occupancy Error:', err);
+        res.status(500).json({ error: 'Aktif kullanıcılar yüklenemedi' });
+    }
+});
+
+// Admin: Force checkout
+router.post('/admin/occupancy/force-checkout/:id', authMiddleware, requireRole('admin', 'superadmin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const db = getDb();
+        const now = new Date();
+
+        const { data: session } = await db.from('check_ins').select('*').eq('id', id).single();
+        if (!session) return res.status(404).json({ error: 'Oturum bulunamadı' });
+
+        const duration = Math.round((now - new Date(session.check_in_time)) / 60000);
+        await db.from('check_ins').update({
+            check_out_time: now.toISOString(),
+            duration_minutes: duration
+        }).eq('id', id);
+
+        // Auto-log as workout if > 15 mins
+        if (duration >= 15) {
+            await db.from('workout_logs').insert({
+                user_id: session.user_id,
+                logged_at: now.toISOString().split('T')[0],
+                duration_minutes: duration
+            });
+        }
+
+        res.json({ message: 'Kullanıcı başarıyla çıkarıldı' });
+    } catch (err) {
+        console.error('Force Checkout Error:', err);
+        res.status(500).json({ error: 'İşlem başarısız' });
     }
 });
 
@@ -1897,16 +1953,16 @@ router.get('/admin/user-logs/:id', authMiddleware, requireRole('admin', 'trainer
         const db = getDb();
 
         const [checkIns, nutrition, audits] = await Promise.all([
-            db.from('turnstile_logs').select('*').eq('user_id', id).order('check_in_time', { ascending: false }).limit(20),
-            db.from('nutrition_logs').select('*, food_items(name)').eq('user_id', id).order('log_date', { ascending: false }).limit(20),
+            db.from('check_ins').select('*').eq('user_id', id).order('check_in_time', { ascending: false }).limit(20),
+            db.from('nutrition_logs').select('*').eq('user_id', id).order('logged_at', { ascending: false }).limit(50),
             db.from('audit_logs').select('*').eq('target_id', id).order('created_at', { ascending: false }).limit(20)
         ]);
 
         const combined = [
             ...(checkIns.data || []).map(l => ({ type: 'check_in', date: l.check_in_time, details: l })),
-            ...(nutrition.data || []).map(l => ({ type: 'nutrition', date: l.log_date, details: l })),
+            ...(nutrition.data || []).map(l => ({ type: 'nutrition', date: l.logged_at, details: l })),
             ...(audits.data || []).map(l => ({ type: 'audit', date: l.created_at, details: l }))
-        ].sort((a, b) => new Date(b.date) - new Date(a.date));
+        ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
         res.json(combined);
     } catch (err) {
