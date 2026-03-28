@@ -330,20 +330,32 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
 
         let trainerStats = null;
         if (user && user.role === 'trainer') {
-            const { data: students } = await db.from('workout_programs').select('users(id, full_name, profile_photo_url, email)').eq('assigned_by', userId).eq('is_active', true);
-            const uniqueStudents = Array.from(new Map((students || []).map(s => [s.users.id, s.users])).values());
-            const studentIds = uniqueStudents.map(s => s.id);
+            const todayStr = new Date().toISOString().split('T')[0];
+            const in1DayStr = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const in7DaysStr = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const in14DaysStr = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-            let pendingInst = [];
-            if (studentIds.length > 0) {
-                const { data } = await db.from('installments').select('*, users(full_name)').in('user_id', studentIds).eq('status', 'pending').order('due_date', { ascending: true });
-                pendingInst = data || [];
-            }
+            const [memCount, activeCount, expiring1, expiring7, expiring14, allPendingInstallments, studentsRes] = await Promise.all([
+                db.from('users').select('id', { count: 'exact', head: true }).eq('role', 'member'),
+                db.from('memberships').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+                db.from('memberships').select('id', { count: 'exact', head: true }).eq('status', 'active').lte('end_date', in1DayStr).gte('end_date', todayStr),
+                db.from('memberships').select('id', { count: 'exact', head: true }).eq('status', 'active').lte('end_date', in7DaysStr).gte('end_date', todayStr),
+                db.from('memberships').select('id', { count: 'exact', head: true }).eq('status', 'active').lte('end_date', in14DaysStr).gte('end_date', todayStr),
+                db.from('installments').select('*, users(full_name)').eq('status', 'pending').order('due_date', { ascending: true }).limit(50),
+                db.from('workout_programs').select('users(id, full_name, profile_photo_url, email)').eq('assigned_by', userId).eq('is_active', true)
+            ]);
+
+            const uniqueStudents = Array.from(new Map((studentsRes.data || []).map(s => [s.users.id, s.users])).values());
 
             trainerStats = {
+                totalMembers: memCount.count || 0,
+                activeMembers: activeCount.count || 0,
+                expiringIn1Day: expiring1.count || 0,
+                expiringIn7Days: expiring7.count || 0,
+                expiringIn14Days: expiring14.count || 0,
+                pendingInstallments: allPendingInstallments.data || [],
                 activeStudents: uniqueStudents.length,
-                students: uniqueStudents,
-                pendingInstallments: pendingInst
+                students: uniqueStudents
             };
         }
 
@@ -666,8 +678,8 @@ router.get('/occupancy/live', authMiddleware, async (req, res) => {
     }
 });
 
-// Admin: Get active people in the gym
-router.get('/admin/occupancy/active', authMiddleware, requireRole('admin', 'superadmin'), async (req, res) => {
+// Admin/Trainer: Get active people in the gym
+router.get('/admin/occupancy/active', authMiddleware, requireRole('admin', 'superadmin', 'trainer'), async (req, res) => {
     try {
         const db = getDb();
         const { data, error } = await db.from('check_ins')
@@ -691,8 +703,8 @@ router.get('/admin/occupancy/active', authMiddleware, requireRole('admin', 'supe
     }
 });
 
-// Admin: Force checkout
-router.post('/admin/occupancy/force-checkout/:id', authMiddleware, requireRole('admin', 'superadmin'), async (req, res) => {
+// Admin/Trainer: Force checkout
+router.post('/admin/occupancy/force-checkout/:id', authMiddleware, requireRole('admin', 'superadmin', 'trainer'), async (req, res) => {
     try {
         const { id } = req.params;
         const db = getDb();

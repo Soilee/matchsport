@@ -209,6 +209,7 @@ export default function DashboardScreen() {
             {currentUserRole === 'trainer' && data.trainerStats && (
               <TrainerDashboard
                 trainerStats={data.trainerStats}
+                occupancy={data.occupancy || { current_count: 0, max_capacity: 50 }}
                 onRefresh={loadData}
               />
             )}

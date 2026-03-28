@@ -196,7 +196,13 @@ export interface DashboardData {
         expiringIn14Days: number;
     };
     trainerStats?: {
+        totalMembers: number;
+        activeMembers: number;
         activeStudents: number;
+        expiringIn1Day: number;
+        expiringIn7Days: number;
+        expiringIn14Days: number;
         students: any[];
+        pendingInstallments?: Installment[];
     };
 }

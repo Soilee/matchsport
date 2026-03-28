@@ -4,6 +4,7 @@ import { Colors } from '@/constants/Colors';
 import Card from '@/components/common/Card';
 import { Ionicons } from '@expo/vector-icons';
 import { adminPayInstallment } from '@/services/api';
+import GymManagementModal from './GymManagementModal';
 
 interface Installment {
     id: string;
@@ -14,15 +15,25 @@ interface Installment {
 
 interface Props {
     trainerStats: {
+        totalMembers: number;
+        activeMembers: number;
         activeStudents: number;
+        expiringIn1Day: number;
+        expiringIn7Days: number;
+        expiringIn14Days: number;
         students: any[];
         pendingInstallments?: Installment[];
+    };
+    occupancy: {
+        current_count: number;
+        max_capacity: number;
     };
     onRefresh?: () => void;
 }
 
-export default function TrainerDashboard({ trainerStats, onRefresh }: Props) {
+export default function TrainerDashboard({ trainerStats, occupancy, onRefresh }: Props) {
     const [approvingId, setApprovingId] = useState<string | null>(null);
+    const [isGymModalVisible, setIsGymModalVisible] = useState(false);
 
     const handleApprove = async (id: string) => {
         Alert.alert(
@@ -55,12 +66,44 @@ export default function TrainerDashboard({ trainerStats, onRefresh }: Props) {
         <View style={styles.container}>
             <Text style={styles.headerTitle}>Eğitmen Paneli</Text>
 
-            <Card title="Özet" style={styles.summaryCard} glow>
+            <View style={styles.gridRow}>
+                <Card style={[styles.gridCard, { backgroundColor: 'rgba(0, 122, 255, 0.05)', padding: 16 }] as any}>
+                    <Ionicons name="people-outline" size={24} color="#007AFF" style={styles.icon} />
+                    <Text style={styles.statVal}>{trainerStats.totalMembers}</Text>
+                    <Text style={styles.statLab}>Toplam Üye</Text>
+                </Card>
+
+                <Card style={[styles.gridCard, { backgroundColor: 'rgba(52, 199, 89, 0.05)', padding: 16 }] as any}>
+                    <Ionicons name="checkmark-circle-outline" size={24} color={Colors.success} style={styles.icon} />
+                    <Text style={styles.statVal}>{trainerStats.activeMembers}</Text>
+                    <Text style={styles.statLab}>Aktif Üyeler</Text>
+                </Card>
+            </View>
+
+            {/* Expiring memberships info for operational awareness */}
+            {(trainerStats.expiringIn1Day > 0 || trainerStats.expiringIn7Days > 0) && (
+                <View style={[styles.gridRow, { marginBottom: 16 }]}>
+                    <Card style={[styles.gridCard, { backgroundColor: 'rgba(255, 82, 82, 0.05)', borderColor: 'rgba(255, 82, 82, 0.1)' }] as any}>
+                        <Text style={[styles.statVal, { color: Colors.error, fontSize: 18 }]}>{trainerStats.expiringIn1Day}</Text>
+                        <Text style={styles.statLab}>Bugün Biten</Text>
+                    </Card>
+                    <Card style={[styles.gridCard, { backgroundColor: 'rgba(255, 214, 0, 0.05)', borderColor: 'rgba(255, 214, 0, 0.1)' }] as any}>
+                        <Text style={[styles.statVal, { color: Colors.warning, fontSize: 18 }]}>{trainerStats.expiringIn7Days}</Text>
+                        <Text style={styles.statLab}>1 Haftada Biten</Text>
+                    </Card>
+                    <Card style={[styles.gridCard, { backgroundColor: 'rgba(64, 196, 255, 0.05)', borderColor: 'rgba(64, 196, 255, 0.1)' }] as any}>
+                        <Text style={[styles.statVal, { color: Colors.info, fontSize: 18 }]}>{trainerStats.expiringIn14Days}</Text>
+                        <Text style={styles.statLab}>2 Haftada Biten</Text>
+                    </Card>
+                </View>
+            )}
+
+            <Card style={styles.summaryCard} glow>
                 <View style={styles.statRow}>
                     <View style={styles.statItem}>
-                        <Ionicons name="people" size={24} color={Colors.primary} />
+                        <Ionicons name="school-outline" size={24} color={Colors.primary} />
                         <Text style={styles.statVal}>{trainerStats.activeStudents}</Text>
-                        <Text style={styles.statLab}>Aktif Öğrencim</Text>
+                        <Text style={styles.statLab}>Öğrencim</Text>
                     </View>
                     <View style={styles.divider} />
                     <View style={styles.statItem}>
@@ -70,6 +113,36 @@ export default function TrainerDashboard({ trainerStats, onRefresh }: Props) {
                     </View>
                 </View>
             </Card>
+
+            <Card title="Salon Doluluğu" style={styles.fullCard}>
+                <View style={styles.occupancyContainer}>
+                    <View style={styles.occCircle}>
+                        <Text style={styles.occText}>{occupancy.current_count}</Text>
+                        <Text style={styles.occLab}>Kişi</Text>
+                    </View>
+                    <View style={styles.occInfo}>
+                        <Text style={styles.occStatus}>
+                            {occupancy.current_count < 40 ? 'Sakin' : occupancy.current_count < 75 ? 'Orta' : 'Yoğun'}
+                        </Text>
+                        <Text style={styles.occSub}>Kapasite: {occupancy.max_capacity}</Text>
+                    </View>
+                    <TouchableOpacity
+                        style={styles.manageBtn}
+                        onPress={() => setIsGymModalVisible(true)}
+                    >
+                        <Ionicons name="settings-outline" size={20} color={Colors.primary} />
+                        <Text style={styles.manageBtnText}>Yönet</Text>
+                    </TouchableOpacity>
+                </View>
+            </Card>
+
+            <GymManagementModal
+                visible={isGymModalVisible}
+                onClose={() => {
+                    setIsGymModalVisible(false);
+                    if (onRefresh) onRefresh();
+                }}
+            />
 
             {/* NEW: Pending Installments Approval */}
             {pending.length > 0 && (
@@ -147,6 +220,20 @@ const styles = StyleSheet.create({
     summaryCard: {
         marginBottom: 10,
     },
+    gridRow: {
+        flexDirection: 'row',
+        gap: 16,
+        marginBottom: 16,
+    },
+    gridCard: {
+        flex: 1,
+        alignItems: 'flex-start',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.05)',
+    },
+    icon: {
+        marginBottom: 12,
+    },
     statRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -184,6 +271,65 @@ const styles = StyleSheet.create({
     },
     studentCard: {
         marginBottom: 12,
+    },
+    fullCard: {
+        marginBottom: 16,
+    },
+    occupancyContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 20,
+        marginTop: 8,
+    },
+    occCircle: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: 'rgba(255, 107, 53, 0.1)',
+        borderWidth: 2,
+        borderColor: Colors.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    occText: {
+        color: Colors.text,
+        fontSize: 18,
+        fontWeight: '800',
+    },
+    occLab: {
+        color: Colors.primary,
+        fontSize: 10,
+        fontWeight: '700',
+        marginTop: -2,
+    },
+    occInfo: {
+        flex: 1,
+    },
+    occStatus: {
+        color: Colors.text,
+        fontSize: 18,
+        fontWeight: '700',
+        marginBottom: 2,
+    },
+    occSub: {
+        color: Colors.textMuted,
+        fontSize: 12,
+    },
+    manageBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
+        backgroundColor: 'rgba(255, 107, 53, 0.1)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 107, 53, 0.2)',
+    },
+    manageBtnText: {
+        color: Colors.primary,
+        fontSize: 14,
+        fontWeight: '700',
     },
     installmentCard: {
         marginBottom: 12,
